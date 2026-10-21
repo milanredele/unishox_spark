@@ -128,8 +128,8 @@ times the reference's time.
 
 `./build-target.sh [triple...]` compiles the sources with the project GNAT-LLVM toolchain
 (`$FC_TOOLS/gnat-llvm`, see `toolchain/`) for the four supported triples by default, exactly as
-`experiments/ada-cross-poc/build-llvm.sh` does (LP64 `-gnateT` file dumped from the
-native GNAT, `--RTS` of the toolchain only for `system.ads`, `-O2 -gnatp -gnatn -fPIC`),
+`experiments/ada-cross-poc/build-llvm.sh` does (the installed `lp64.atp` via `-gnateT`, the light runtime from `$FC_TOOLS/rts/<triple>`,
+`-O2 -gnatp -gnatn -fPIC`),
 with the restrictions of `unishox.adc`. The only undefined symbol is `memset` (Android) or
 `_bzero` (iOS: LLVM's AArch64 back end turns a zero memset of variable size into `bzero`,
 which libSystem provides). No GNAT runtime symbol, no secondary stack, no exception
