@@ -1,0 +1,26 @@
+--  Copyright 2026 The FreedomChat authors
+--  SPDX-License-Identifier: Apache-2.0
+--
+--  Benchmark; build with -XUNISHOX_BUILD_MODE=bench (as release: -O2 -gnatp).
+--  The C reference is compiled by bench.sh into build/libunishox2_ref.a.
+
+with "../unishox_spark.gpr";
+
+project Bench is
+
+   for Source_Dirs use (".");
+   for Object_Dir use "build/obj";
+   for Exec_Dir use "build";
+   for Main use ("bench_unishox.adb");
+   for Languages use ("Ada");
+
+   package Compiler is
+      for Default_Switches ("Ada") use ("-gnat2022", "-O2", "-gnatwa", "-gnatwJ");
+   end Compiler;
+
+   package Linker is
+      for Default_Switches ("Ada") use
+        ("-L" & Project'Project_Dir & "build", "-lunishox2_ref");
+   end Linker;
+
+end Bench;

@@ -355,6 +355,7 @@ package body Unishox with SPARK_Mode is
       K            : Natural;
       Longest_Len  : Natural := 0;
       Longest_Dist : Natural := 0;
+      Need         : Natural;
    begin
       Handled := False;
       if L < Nice_Len then
@@ -363,25 +364,37 @@ package body Unishox with SPARK_Mode is
       for J in reverse 0 .. L - Nice_Len loop
          pragma Loop_Invariant (L + Longest_Len + Nice_Len <= Len
                                 and Longest_Dist <= L);
-         K := L;
-         while K < Len and then J + (K - L) < L
-           and then Get (Input, K) = Get (Input, J + (K - L))
-         loop
-            pragma Loop_Invariant (K >= L and K < Len);
-            pragma Loop_Variant (Increases => K);
-            K := K + 1;
-         end loop;
-         --  Skip partial UTF-8 matches. Stopping at L + Nice_Len - 1
-         --  gives the same outcome as the reference's unbounded loop:
-         --  below that point no match is possible either way.
-         while K >= L + Nice_Len and then Get_Or_Zero (Input, K) / 64 = 2 loop
-            pragma Loop_Invariant (K <= Len);
-            pragma Loop_Variant (Decreases => K);
-            K := K - 1;
-         end loop;
-         if K - L > Nice_Len - 1 and then K - L - Nice_Len > Longest_Len then
-            Longest_Len := K - L - Nice_Len;
-            Longest_Dist := L - J - Nice_Len + 1;
+         Need := Longest_Len + Nice_Len;
+         --  Shortcut, not in the reference but exact: a candidate can only
+         --  replace the longest match if the bytes at offsets 0 and Need
+         --  match (and are in range); otherwise the reference computes a
+         --  match length it then discards.
+         if L + Need < Len and then J + Need < L
+           and then Get (Input, L) = Get (Input, J)
+           and then Get (Input, L + Need) = Get (Input, J + Need)
+         then
+            K := L;
+            while K < Len and then J + (K - L) < L
+              and then Get (Input, K) = Get (Input, J + (K - L))
+            loop
+               pragma Loop_Invariant (K >= L and K < Len);
+               pragma Loop_Variant (Increases => K);
+               K := K + 1;
+            end loop;
+            --  Skip partial UTF-8 matches. Stopping at L + Nice_Len - 1
+            --  gives the same outcome as the reference's unbounded loop:
+            --  below that point no match is possible either way.
+            while K >= L + Nice_Len and then Get_Or_Zero (Input, K) / 64 = 2
+            loop
+               pragma Loop_Invariant (K <= Len);
+               pragma Loop_Variant (Decreases => K);
+               K := K - 1;
+            end loop;
+            if K - L > Nice_Len - 1 and then K - L - Nice_Len > Longest_Len
+            then
+               Longest_Len := K - L - Nice_Len;
+               Longest_Dist := L - J - Nice_Len + 1;
+            end if;
          end if;
       end loop;
       if Longest_Len > 0 then

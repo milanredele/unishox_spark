@@ -113,6 +113,21 @@ for n in (900, 1000, 1023, 1024, 1025, 1100, 2048, 4000, 4095, 4096):
     hb = HU.encode()[:n]
     add("hungarian %d" % n, hb)
 
+# A 1 kB Hungarian message without repetitions (used by the benchmark)
+HU_1K = ("Helyzetjelentés a keleti oldalról, délután. A vízosztás működik az iskolánál és a templomnál, "
+         "mindkettő hétig van nyitva. A sarki gyógyszertár újra kinyitott, de csak készpénzt fogad el. "
+         "A buszok nem járnak; néhány magánautó pénzért kiviszi az embereket a város szélére. "
+         "A hálózat továbbra sem működik senkinél, akivel beszéltünk. Kérjük, adjátok tovább mindenkinek, "
+         "aki észak felé tart: a második híd gyalog járható, az első nem. A gyerekes családok menjenek "
+         "a közösségi házba, ott van matrac és némi élelem. Ha tudtok üzeneteket visszavinni a központ "
+         "felé, sötétedés előtt gyertek el az iskolához, és átadjuk a csomagot. Ezt a rövid üzenetet "
+         "vigyétek tovább, ne írjatok hozzá semmit. Köszönjük mindenkinek, aki hordozza ezeket, jobban "
+         "működik, mint vártuk. A következő jelentés holnap délben ugyanonnan, hacsak valami nem változik. "
+         "Aki orvos vagy ápoló, jelentkezzen a tornateremben, ott sebesülteket látnak el. "
+         "Az áramszünet miatt a hűtők nem működnek, a romlandó ételt ma egyétek meg.")
+assert len(HU_1K.encode()) >= 1024, len(HU_1K.encode())
+add("hungarian text 1k", HU_1K.encode()[:1024])
+
 # Random printable text, words and numbers
 WORDS = ("the of and to in is you that it he was for on are as with his they at be this have from "
          "or one had by word but not what all were we when your can said there use an each which she "
