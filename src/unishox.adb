@@ -1605,17 +1605,21 @@ package body Unishox with SPARK_Mode is
       Success       : out Boolean)
    is
       D      : Decoder;
-      Result : Step_Result;
+      Result : Step_Result := Go_On;
    begin
       Output := (others => 0);
-      --  Every step consumes at least one bit, so the bound is not reached
+      --  Every step that goes on consumes at least one bit, so the bound
+      --  never ends the loop: it ends as "while (bit_no < len)" does.
       for Iter in 1 .. Max_Bits loop
          pragma Loop_Invariant (Valid_Dec (Input, Output, D)
-                                and then D.Bit_No >= Iter);
+                                and then D.Bit_No >= Iter
+                                and then Result = Go_On);
          exit when D.Bit_No >= 8 * Input'Length;
          Decode_Step (Input, Output, D, Result);
          exit when Result = Stop or else D.Overflow;
       end loop;
+      pragma Assert (D.Bit_No >= 8 * Input'Length or else Result = Stop
+                     or else D.Overflow);
       if D.Overflow then
          Output := (others => 0);
          Output_Length := 0;
