@@ -1,0 +1,42 @@
+--  Copyright 2026 The FreedomChat authors
+--  SPDX-License-Identifier: Apache-2.0
+
+project Unishox_Spark is
+
+   type Build_Mode_Type is ("release", "debug", "checks");
+   Build_Mode : Build_Mode_Type :=
+     external ("UNISHOX_BUILD_MODE", "release");
+
+   for Library_Name use "unishox_spark";
+   for Library_Kind use "static";
+   for Source_Dirs use ("src");
+   for Object_Dir use "obj/" & Build_Mode;
+   for Library_Dir use "lib/" & Build_Mode;
+   for Languages use ("Ada");
+
+   Common_Switches :=
+     ("-gnat2022", "-gnatwa", "-gnatwJ", "-gnatw.X", "-gnatwe", "-gnaty3abcefhiklM100nprtux",
+      "-gnatec=" & Project'Project_Dir & "unishox.adc");
+
+   package Compiler is
+      case Build_Mode is
+         when "release" =>
+            --  Checks off: absence of run-time errors is proved by GNATprove
+            for Default_Switches ("Ada") use
+              Common_Switches & ("-O2", "-gnatp", "-gnatn");
+         when "debug" =>
+            for Default_Switches ("Ada") use
+              Common_Switches & ("-O0", "-g", "-gnata");
+         when "checks" =>
+            --  All run-time checks and contracts on, for the tests
+            for Default_Switches ("Ada") use
+              Common_Switches & ("-O2", "-gnata", "-gnato");
+      end case;
+   end Compiler;
+
+   package Prove is
+      for Proof_Switches ("Ada") use
+        ("--level=2", "--mode=all", "--report=statistics");
+   end Prove;
+
+end Unishox_Spark;

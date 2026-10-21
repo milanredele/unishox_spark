@@ -1,0 +1,18 @@
+name = "unishox_spark"
+description = "Unishox2 short-string compression in SPARK, proved free of run-time errors"
+long-description = """
+A SPARK 2014 / Ada 2022 re-implementation of the Unishox2 short-string compressor
+(Siara Logics, Apache-2.0), bit-compatible with unishox2_compress_simple and
+unishox2_decompress_simple of the reference C implementation. Light-runtime
+discipline: no heap, no secondary stack, no exceptions, no tasking, fixed-size
+caller-provided buffers of at most 4096 bytes.
+"""
+version = "0.1.0"
+licenses = "Apache-2.0"
+authors = ["The FreedomChat authors"]
+maintainers = ["The FreedomChat authors"]
+tags = ["spark", "compression", "unishox", "embedded"]
+project-files = ["unishox_spark.gpr"]
+
+[[depends-on]]
+gnat = ">=13"
