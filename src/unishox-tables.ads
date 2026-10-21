@@ -114,7 +114,7 @@ private package Unishox.Tables with SPARK_Mode, Pure is
       (3, (34, 58, 32, 0)),
       (2, (60, 47, 0, 0)),
       (2, (61, 34, 0, 0)),
-      (4, (34, 58, 58, 34)),
+      (3, (34, 58, 34, 0)),
       (3, (58, 47, 47, 0)));
    Freq_Codes : constant array (Freq_Index) of Set_Code :=
      ((Sym, 25), (Sym, 26), (Sym, 27), (Num, 23), (Num, 24), (Num, 25));

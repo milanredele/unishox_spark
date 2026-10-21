@@ -8,3 +8,9 @@ if [ -z "${GPR_BIN:-}" ]; then
 fi
 PATH="${GNAT_BIN:+$GNAT_BIN:}${GPR_BIN:+$GPR_BIN:}$PATH"
 export PATH GNAT_BIN GPR_BIN
+if [ "$(uname -s)" = Darwin ] && [ -z "${SDKROOT:-}" ]; then
+  SDKROOT=$(xcrun --sdk macosx --show-sdk-path 2>/dev/null || true); export SDKROOT
+fi
+if [ "$(uname -s)" = Darwin ] && [ -n "${SDKROOT:-}" ]; then
+  LIBRARY_PATH="$SDKROOT/usr/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"; export LIBRARY_PATH   # libSystem for the GNAT linker
+fi

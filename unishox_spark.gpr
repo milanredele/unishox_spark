@@ -3,7 +3,7 @@
 
 project Unishox_Spark is
 
-   type Build_Mode_Type is ("release", "debug", "checks");
+   type Build_Mode_Type is ("release", "debug", "checks", "bench");
    Build_Mode : Build_Mode_Type :=
      external ("UNISHOX_BUILD_MODE", "release");
 
@@ -15,22 +15,31 @@ project Unishox_Spark is
    for Languages use ("Ada");
 
    Common_Switches :=
-     ("-gnat2022", "-gnatwa", "-gnatwJ", "-gnatw.X", "-gnatwe", "-gnaty3abcefhiklM100nprtux",
-      "-gnatec=" & Project'Project_Dir & "unishox.adc");
+     ("-gnat2022", "-gnatwa", "-gnatwJ", "-gnatw.X", "-gnatwe",
+      "-gnaty3abcefhiklM100nprtux");
+
+   --  The light-runtime restrictions are partition-wide, so the builds that
+   --  are linked into the (full-runtime) test and benchmark programs leave
+   --  them out; the generated code is the same.
+   Restrictions := ("-gnatec=" & Project'Project_Dir & "unishox.adc");
 
    package Compiler is
       case Build_Mode is
          when "release" =>
             --  Checks off: absence of run-time errors is proved by GNATprove
             for Default_Switches ("Ada") use
-              Common_Switches & ("-O2", "-gnatp", "-gnatn");
+              Common_Switches & Restrictions & ("-O2", "-gnatp", "-gnatn");
          when "debug" =>
             for Default_Switches ("Ada") use
-              Common_Switches & ("-O0", "-g", "-gnata");
+              Common_Switches & Restrictions & ("-O0", "-g", "-gnata");
          when "checks" =>
             --  All run-time checks and contracts on, for the tests
             for Default_Switches ("Ada") use
               Common_Switches & ("-O2", "-gnata", "-gnato");
+         when "bench" =>
+            --  As release, for linking into the benchmark program
+            for Default_Switches ("Ada") use
+              Common_Switches & ("-O2", "-gnatp", "-gnatn");
       end case;
    end Compiler;
 
