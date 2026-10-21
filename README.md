@@ -126,8 +126,8 @@ times the reference's time.
 
 ## Cross targets
 
-`./build-target.sh` compiles the sources with GNAT-LLVM (`~/.local/share/etcs-dmi/
-adawebpack-native`) for `arm64-apple-ios15.0` and `aarch64-linux-android29`, exactly as
+`./build-target.sh [triple...]` compiles the sources with the project GNAT-LLVM toolchain
+(`$FC_TOOLS/gnat-llvm`, see `toolchain/`) for the four supported triples by default, exactly as
 `experiments/ada-cross-poc/build-llvm.sh` does (LP64 `-gnateT` file dumped from the
 native GNAT, `--RTS` of the toolchain only for `system.ads`, `-O2 -gnatp -gnatn -fPIC`),
 with the restrictions of `unishox.adc`. The only undefined symbol is `memset` (Android) or
