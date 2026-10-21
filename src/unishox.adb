@@ -272,42 +272,37 @@ package body Unishox with SPARK_Mode is
       Put_Bits (Output, E, 0, 2);
    end Append_Nibble_Escape;
 
-   --  readUTF8: the code point at K (0 if none, overlong or truncated)
-   procedure Read_UTF8
-     (Input : Byte_Array; K : Natural; Code : out Code_Point;
-      Len : out Natural)
+   --  Number of bytes of the UTF-8 sequence of a code point read by UTF8_At
+   function UTF8_Length (Code : Code_Point) return Natural is
+     (if Code < 16#800# then 2 elsif Code < 16#1_0000# then 3 else 4);
+
+   --  readUTF8: the code point at K (0 if none, overlong or truncated).
+   --  Like the reference, surrogates and values up to 16#1F_FFFF# pass.
+   function UTF8_At (Input : Byte_Array; K : Natural) return Code_Point
    with Pre  => K <= Input'Length,
-        Post => Len <= 4
-                and then (if Code /= 0 then Len >= 2 and K + Len <= Input'Length)
+        Post => UTF8_At'Result = 0
+                or else K + UTF8_Length (UTF8_At'Result) <= Input'Length
    is
       N  : constant Natural := Input'Length;
       B0 : Byte;
       V  : Natural;
    begin
-      Code := 0;
-      Len := 0;
       if K >= N then
-         return;
+         return 0;
       end if;
       B0 := Get (Input, K);
       if K + 1 < N and then B0 / 32 = 6
         and then Get (Input, K + 1) / 64 = 2
       then
          V := Natural (B0 mod 32) * 64 + Natural (Get (Input, K + 1) mod 64);
-         if V >= 16#80# then
-            Code := V;
-            Len := 2;
-         end if;
+         return (if V >= 16#80# then V else 0);
       elsif K + 2 < N and then B0 / 16 = 14
         and then Get (Input, K + 1) / 64 = 2
         and then Get (Input, K + 2) / 64 = 2
       then
          V := (Natural (B0 mod 16) * 64 + Natural (Get (Input, K + 1) mod 64))
                 * 64 + Natural (Get (Input, K + 2) mod 64);
-         if V >= 16#800# then
-            Code := V;
-            Len := 3;
-         end if;
+         return (if V >= 16#800# then V else 0);
       elsif K + 3 < N and then B0 / 8 = 30
         and then Get (Input, K + 1) / 64 = 2
         and then Get (Input, K + 2) / 64 = 2
@@ -316,22 +311,10 @@ package body Unishox with SPARK_Mode is
          V := ((Natural (B0 mod 8) * 64 + Natural (Get (Input, K + 1) mod 64))
                  * 64 + Natural (Get (Input, K + 2) mod 64))
                 * 64 + Natural (Get (Input, K + 3) mod 64);
-         if V >= 16#1_0000# then
-            Code := V;
-            Len := 4;
-         end if;
+         return (if V >= 16#1_0000# then V else 0);
       end if;
-   end Read_UTF8;
-
-   function Has_UTF8 (Input : Byte_Array; K : Natural) return Boolean
-   with Pre => K <= Input'Length
-   is
-      Code : Code_Point;
-      Len  : Natural;
-   begin
-      Read_UTF8 (Input, K, Code, Len);
-      return Code /= 0;
-   end Has_UTF8;
+      return 0;
+   end UTF8_At;
 
    type Nibble_Kind is (Nib_Num, Nib_Hex_Lower, Nib_Hex_Upper, Nib_Not);
 
@@ -359,7 +342,9 @@ package body Unishox with SPARK_Mode is
       Output  : in out Byte_Array;
       E       : in out Encoder;
       Handled : out Boolean)
-   with Pre  => L < Input'Length and then Input'Length <= Max_Length
+   with Pre  => Input'Length <= Max_Length
+                and then L < Input'Length
+                and then L + Nice_Len <= Input'Length
                 and then Valid_Pos (Output, E),
         Post => Valid_Pos (Output, E) and then L >= L'Old
                 and then L < Input'Length
@@ -695,9 +680,7 @@ package body Unishox with SPARK_Mode is
       C_In      : constant Byte := Get (Input, L);
       C_Next    : Byte := 0;
       Is_Upper  : constant Boolean := Is_Upper_Letter (C_In);
-      Cp, Cp2   : Code_Point;
-      U_Len     : Natural;
-      U_Len2    : Natural;
+      Cp        : Code_Point;
       Bin_Count : Natural;
       Idx       : Natural;
    begin
@@ -770,11 +753,10 @@ package body Unishox with SPARK_Mode is
       elsif C_In = 9 then
          Append_Code (Output, E, Tab_Code);
       else
-         Read_UTF8 (Input, L, Cp, U_Len);
+         Cp := UTF8_At (Input, L);
          if Cp /= 0 then
             if E.State /= Uni then
-               Read_UTF8 (Input, L + U_Len, Cp2, U_Len2);
-               if Cp2 /= 0 then
+               if UTF8_At (Input, L + UTF8_Length (Cp)) /= 0 then
                   if E.State /= Alpha then
                      Switch_To (Output, E, Alpha);
                   end if;
@@ -787,12 +769,12 @@ package body Unishox with SPARK_Mode is
             end if;
             Encode_Unicode (Output, E, Cp, E.Prev_Uni);
             E.Prev_Uni := Cp;
-            L := L + U_Len - 1;
+            L := L + UTF8_Length (Cp) - 1;
          else
             Bin_Count := 1;
             for Bi in L + 1 .. Len - 1 loop
                pragma Loop_Invariant (Bin_Count = Bi - L);
-               exit when Has_UTF8 (Input, Bi);
+               exit when UTF8_At (Input, Bi) /= 0;
                exit when Bi + 4 < Len
                  and then Get (Input, Bi) = Get (Input, Bi - 1)
                  and then Get (Input, Bi) = Get (Input, Bi + 1)
@@ -873,7 +855,10 @@ package body Unishox with SPARK_Mode is
          Append_Switch_Code (Output, Rst, E.W, E.State);
          Append_Bits (Output, Rst, E.W, HCodes (Num), HCode_Lens (Num));
       end if;
+      pragma Warnings (GNATprove, Off, """E.W"" is set by ""Append_Bits""",
+                       Reason => "the writer is not needed after the terminator");
       Append_Bits (Output, Rst, E.W, VCodes (Term_V), VCode_Lens (Term_V));
+      pragma Warnings (GNATprove, On, """E.W"" is set by ""Append_Bits""");
       Output_Length := Rst;
       Success := True;
    end Compress;
@@ -1077,6 +1062,9 @@ package body Unishox with SPARK_Mode is
          return;
       end if;
       Get_Num_From_Bits (Input, Bit_No, Count_Bit_Lens (Idx), V, Ok);
+      if not Ok then
+         return;
+      end if;
       Count := V + (if Idx = 0 then 0 else Count_Adder (Idx - 1));
       Bit_No := Bit_No + Count_Bit_Lens (Idx);
       Valid := True;
@@ -1125,6 +1113,9 @@ package body Unishox with SPARK_Mode is
          return;
       end if;
       Get_Num_From_Bits (Input, Bit_No, Uni_Bit_Len (Idx), V, Ok);
+      if not Ok then
+         return;
+      end if;
       Mag := V + Uni_Adder (Idx);
       Bit_No := Bit_No + Uni_Bit_Len (Idx);
       Kind := U_Delta;
@@ -1395,7 +1386,7 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Dec (Input, Output, D)
                 and then (if Result = Go_On then D.Bit_No > D.Bit_No'Old)
    is
-      V        : VCode_Index := 0;
+      V        : VCode_Index;
       H2       : Set_Kind;
       Ok       : Boolean;
       Is_Upper : Boolean;
