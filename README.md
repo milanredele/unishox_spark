@@ -160,8 +160,10 @@ Differences in behaviour and scope:
   codes (negative `olen`), and the preset-1 terminator. The last step of
   `append_final_bits` ("fill the byte with the last bit") is unreachable from the simple
   API: the terminator is always cut at the end of the last started byte.
-- **Two exact shortcuts:** the repeated-substring search skips candidates whose byte at
-  the offset that would beat the current longest match differs; the template threshold
+- **Two exact shortcuts:** the repeated-substring search skips a candidate position
+  when its first byte, or the byte at the length that would beat the current longest
+  match, differs (the reference measures such matches and then discards them); the
+  template threshold
   `(float) j / rem > 0.66` is computed as `50 * j > 33 * rem`, which is exact for the four
   template lengths (24, 10, 14, 8).
 
