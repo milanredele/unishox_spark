@@ -1,0 +1,11 @@
+unishox_spark
+Copyright 2026 The FreedomChat authors
+
+This product is a re-implementation in SPARK/Ada of the Unishox2 short-string compression
+algorithm, including its default code tables (USX_HCODES_DFLT, USX_HCODE_LENS_DFLT,
+USX_FREQ_SEQ_DFLT, USX_TEMPLATES, the character sets, the vertical codes and the count and
+Unicode delta codes).
+
+Unishox2: Copyright (C) 2020 Siara Logics (cc), author Arundale Ramanathan, with James Z. M. Gao.
+Licensed under the Apache License, Version 2.0. https://github.com/siara-cc/Unishox2
+The unmodified reference sources are kept in reference/ for differential testing only.
