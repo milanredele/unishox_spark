@@ -19,9 +19,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: alire-project/setup-alire@v4
-
-      - name: Select the GNAT toolchain
-        run: alr -n toolchain --select gnat_native gprbuild
+        with:
+          version: '2.1.1'          # its index has gnatprove 16.1.0; the action also selects gnat_native and gprbuild
 
       - name: Build (release)
         run: alr -n exec -- ./build.sh release
