@@ -1,7 +1,9 @@
 # unishox_spark
 
-Unishox2 short-string compression in SPARK 2014 / Ada 2022, for the FreedomChat core (WP5).
-It reproduces `unishox2_compress_simple` and `unishox2_decompress_simple` of the reference C
+Unishox2 short-string compression in SPARK 2014 / Ada 2022, proved free of run-time errors.
+Written for the [FreedomChat](https://github.com/milanredele/FreedomChat) core, an offline mesh
+messenger whose messages must fit a 1024-byte envelope, and published on its own because
+nothing else in the Alire ecosystem compresses short strings. It reproduces `unishox2_compress_simple` and `unishox2_decompress_simple` of the reference C
 implementation ([Unishox2](https://github.com/siara-cc/Unishox2), Siara Logics, Apache-2.0)
 bit for bit, with the reference's default tables (`USX_HCODES_DFLT`, `USX_HCODE_LENS_DFLT`,
 `USX_FREQ_SEQ_DFLT`, `USX_TEMPLATES`). The output format is the reference's, so either side
@@ -48,7 +50,8 @@ caller must authenticate before decompressing (addendum section 5).
 | `prove.sh`, `PROOF.md` | GNATprove at level 2 and its results |
 | `tests/run.sh` | differential tests against the C reference |
 | `bench/bench.sh` | object size and throughput |
-| `build-target.sh` | GNAT-LLVM cross build for iOS and Android |
+| `build-target.sh` | GNAT-LLVM cross build for iOS and Android (the toolchain of [ada-mobile](https://github.com/milanredele/ada-mobile)) |
+| `tools/prove.sh` | the proof runner shared with the FreedomChat core: all proved, no warning, a margin to the prover limits |
 | `reference/` | unmodified `unishox2.c/h` (commit `4981d94`), used only by the tests and benchmark |
 
 `./build.sh [release|debug|checks]` builds the static library with the Alire GNAT
@@ -62,7 +65,8 @@ for the bounded decoder used in fuzzing; the `*_simple` functions are unchanged 
 library with all checks and contracts on, and runs:
 
 1. **Corpus** (`tests/corpus.txt`, written by `tests/gen_corpus.py`, 547 strings): the five
-   samples of `experiments/compression-bench/samples.py`; the empty string and all 256
+   samples of FreedomChat's compression benchmark (`experiments/compression-bench/samples.py`
+   there); the empty string and all 256
    one-byte strings; ASCII prose, JSON, HTML, URLs, CRLF/tab/control text, upper-case runs;
    numbers, dates, times, phone numbers, hexadecimal and UUIDs (the template and nibble
    codes); Hungarian, other accented Latin, Greek, Cyrillic, Hebrew, Arabic, CJK, Indic, Thai;
@@ -88,9 +92,9 @@ about 18 s.
 
 ## Compression ratios
 
-The five samples of the addendum's table (section 5), identical to the C reference:
+The five samples of FreedomChat's compression study, identical to the C reference:
 
-| sample | bytes | unishox_spark | addendum (C) |
+| sample | bytes | unishox_spark | C reference |
 |---|---|---|---|
 | English, 1 sentence | 94 | 57 | 57 |
 | English, 1 paragraph | 442 | 257 | 257 |

@@ -45,10 +45,10 @@ project Unishox_Spark is
 
    package Prove is
       --  Flow analysis and proof of absence of run-time errors and of the contracts, with
-      --  the practice of the core (../core/proof/README.md): CVC5 and Z3 with a limit in
-      --  steps, the shared cache of proof results (FC_PROOF_CACHE, by default
-      --  ~/.local/share/freedomchat/proof-cache), every unproved check and every warning
-      --  fails the run (prove.sh, through ../tools/prove.sh).
+      --  the practice of tools/prove.sh: CVC5 and Z3 with a limit in steps, the shared
+      --  cache of proof results (FC_PROOF_CACHE, by default
+      --  ~/.local/share/unishox_spark/proof-cache), every unproved check and every warning
+      --  fails the run (prove.sh, through tools/prove.sh).
       for Proof_Switches ("Ada") use
         ("--mode=all", "--level=2", "--prover=cvc5,z3",
          "--steps=100000", "--timeout=60",
@@ -56,7 +56,7 @@ project Unishox_Spark is
          "--report=statistics", "-j0",
          "--memcached-server=file:"
          & external ("FC_PROOF_CACHE",
-                     external ("HOME") & "/.local/share/freedomchat/proof-cache"));
+                     external ("HOME") & "/.local/share/unishox_spark/proof-cache"));
    end Prove;
 
 end Unishox_Spark;

@@ -1,4 +1,4 @@
---  Light-runtime discipline of the FreedomChat core
+--  Light-runtime discipline (as the FreedomChat core, where this crate comes from)
 pragma Restrictions (No_Exception_Propagation);
 pragma Restrictions (No_Secondary_Stack);
 pragma Restrictions (No_Allocators);

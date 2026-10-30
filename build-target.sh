@@ -1,7 +1,7 @@
 #!/bin/sh
-# Cross-compile the library with GNAT-LLVM for the device targets, as
-# experiments/ada-cross-poc/build-llvm.sh does: one compiler, --target=<triple>, the
-# toolchain's LP64 target parameters (-gnateT), the light-runtime restrictions
+# Cross-compile the library with GNAT-LLVM for the device targets, with the toolchain and
+# light runtime of https://github.com/milanredele/ada-mobile: one compiler, --target=<triple>,
+# the toolchain's LP64 target parameters (-gnateT), the light-runtime restrictions
 # (unishox.adc), checks off (-gnatp, allowed because absence of run-time errors is proved).
 # Then checks that the objects need nothing but memcpy/memset. On Apple targets LLVM's
 # AArch64 back end lowers a memset of zeros with a variable size to bzero (libSystem),
@@ -11,14 +11,14 @@
 #   default: arm64-apple-macos15.0 arm64-apple-ios15.0 arm64-apple-ios15.0-simulator
 #            aarch64-linux-android29
 # Environment:
-#   FC_TOOLS     project tool root (default ~/.local/share/freedomchat, as toolchain/env.sh)
-#   FC_GNATLLVM  GNAT-LLVM toolchain (default $FC_TOOLS/gnat-llvm, from toolchain/install.sh)
+#   FC_TOOLS     ada-mobile's tool root (default ~/.local/share/freedomchat, as its toolchain/env.sh)
+#   FC_GNATLLVM  GNAT-LLVM toolchain (default $FC_TOOLS/gnat-llvm, from ada-mobile's toolchain/install.sh)
 #   FC_LP64_ATP  -gnateT file (default $FC_GNATLLVM/lib/lp64.atp, the installed toolchain/lp64.atp)
-#   FC_RTS       runtime for --RTS (default $FC_TOOLS/rts/<triple>, from runtime/build.sh, when
-#                it exists; only its specs are read, nothing is linked)
+#   FC_RTS       runtime for --RTS (default $FC_TOOLS/rts/<triple>, from ada-mobile's runtime/build.sh,
+#                when it exists; only its specs are read, nothing is linked)
 #   FC_RTS_SHIM  =1: use the stand-in runtime instead (also used, with a note, when no light
 #                runtime is installed): AdaWebPack's system.ads and GCC's ada.ads and interfac.ads
-#                from the toolchain sources, as experiments/ada-cross-poc does
+#                from the toolchain sources
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 FC_TOOLS=${FC_TOOLS:-$HOME/.local/share/freedomchat}

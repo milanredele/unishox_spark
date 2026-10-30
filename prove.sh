@@ -2,8 +2,8 @@
 # Copyright 2026 The FreedomChat authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# GNATprove on Unishox (unishox_spark.gpr, release mode), through the shared ../tools/prove.sh:
-# every check proved, no warning, the margin to the limits kept (../core/proof/README.md).
+# GNATprove on Unishox (unishox_spark.gpr, release mode), through tools/prove.sh: every
+# check proved, no warning, the margin to the limits kept (see the header of tools/prove.sh).
 # gnatprove is taken from $GNATPROVE, then PATH, then the Alire cache
 # (`alr get gnatprove` or `alr with gnatprove` puts it there).
 # Usage: ./prove.sh [extra gnatprove switches], e.g. ./prove.sh --info
@@ -14,4 +14,4 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 # an unrolled loop over Template_Index); a new one is most likely a loop without an invariant.
 FC_PROOF_MAX_WIDE=${FC_PROOF_MAX_WIDE:-7}
 export FC_PROOF_MAX_WIDE
-exec sh "$HERE/../tools/prove.sh" "$HERE/unishox_spark.gpr" -XUNISHOX_BUILD_MODE=release "$@"
+exec sh "$HERE/tools/prove.sh" "$HERE/unishox_spark.gpr" -XUNISHOX_BUILD_MODE=release "$@"

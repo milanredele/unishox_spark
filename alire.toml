@@ -10,6 +10,9 @@ caller-provided buffers of at most 4096 bytes.
 version = "0.1.0"
 licenses = "Apache-2.0"
 authors = ["The FreedomChat authors"]
+maintainers = ["Milán Redele <milan.redele@gmail.com>"]
+maintainers-logins = ["milanredele"]
+website = "https://github.com/milanredele/unishox_spark"
 tags = ["spark", "compression", "unishox", "embedded"]
 project-files = ["unishox_spark.gpr"]
 
