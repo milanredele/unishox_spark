@@ -54,6 +54,10 @@ caller must authenticate before decompressing (addendum section 5).
 | `tools/prove.sh` | the proof runner shared with the FreedomChat core: all proved, no warning, a margin to the prover limits |
 | `reference/` | unmodified `unishox2.c/h` (commit `4981d94`), used only by the tests and benchmark |
 
+CI (`.github/workflows/ci.yml`, GitHub Actions on Ubuntu) runs the build, the differential tests
+and the proof with GNATprove 16.1.0 on every push; publishing to the Alire index is done by hand
+with `alr publish` on a tag.
+
 `./build.sh [release|debug|checks]` builds the static library with the Alire GNAT
 (`env.sh` finds it under `~/.local/share/alire/toolchains`; set `GNAT_BIN`/`GPR_BIN` to
 override). `GNATPROVE=<path>/bin/gnatprove ./prove.sh` runs the proof.

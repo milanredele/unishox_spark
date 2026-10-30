@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: Apache-2.0
+# Build, differential tests against the C reference, and the GNATprove proof,
+# on every push and pull request. Publishing to the Alire index stays manual
+# (alr publish on a tag).
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: alire-project/setup-alire@v4
+
+      - name: Select the GNAT toolchain
+        run: alr -n toolchain --select gnat_native gprbuild
+
+      - name: Build (release)
+        run: alr -n exec -- ./build.sh release
+
+      - name: Differential tests against the C reference
+        run: alr -n exec -- tests/run.sh
+
+      - name: Fetch GNATprove 16.1.0
+        run: |
+          mkdir -p "$HOME/tools" && cd "$HOME/tools"
+          alr -n get gnatprove=16.1.0
+          echo "GNATPROVE=$(ls -d "$HOME"/tools/gnatprove_16.1.0_*/bin/gnatprove)" >> "$GITHUB_ENV"
+
+      - name: Proof (all checks, no warning, margin kept)
+        run: alr -n exec -- ./prove.sh
+
+      - name: Keep the proof log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prove-log
+          path: obj/prove.log
+          if-no-files-found: ignore
