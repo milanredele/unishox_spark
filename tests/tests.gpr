@@ -1,16 +1,21 @@
 --  Copyright 2026 The FreedomChat authors
 --  SPDX-License-Identifier: Apache-2.0
 --
---  Differential test and benchmark. The C reference is compiled by run.sh
---  (clang) into build/libunishox2_ref.a.
+--  Differential tests. The C reference is compiled by run.sh (clang) into
+--  build/libunishox2_ref.a. The library is taken in the mode given by
+--  UNISHOX_BUILD_MODE: checks (all checks and contracts) or bench (the
+--  release code, -O2 -gnatp -gnatn); objects and programs go to
+--  build/obj-<mode> and build/<mode>.
 
 with "../unishox_spark.gpr";
 
 project Tests is
 
+   Mode := external ("UNISHOX_BUILD_MODE", "checks");
+
    for Source_Dirs use ("src");
-   for Object_Dir use "build/obj";
-   for Exec_Dir use "build";
+   for Object_Dir use "build/obj-" & Mode;
+   for Exec_Dir use "build/" & Mode;
    for Main use ("test_unishox.adb");
    for Languages use ("Ada");
 
