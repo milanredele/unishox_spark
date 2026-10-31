@@ -56,6 +56,18 @@ package body Unishox with SPARK_Mode is
       Failed : Boolean := False;  --  output limit reached
    end record;
 
+   --  W advanced from Old by at most Bits bits within the limit of Limit
+   --  bytes: nothing changes once failed, and a failure means that the
+   --  bits did not fit (the exact counterpart is in the Post of
+   --  Append_Bits and Append_Value).
+   function Wrote (Old, W : Bit_Writer; Bits, Limit : Natural) return Boolean
+   is (W.Pos <= 8 * Limit and then Old.Pos <= W.Pos
+       and then W.Pos <= Old.Pos + Bits
+       and then (if Old.Failed then W = Old)
+       and then (if W.Failed and then not Old.Failed
+                 then Old.Pos + Bits > 8 * Limit))
+   with Ghost, Pre => Bits <= Max_Bits and then Limit <= Max_Length;
+
    --  append_bits: appends the Len most significant bits of Code at bit
    --  W.Pos, without writing at or beyond byte Limit. Once a write would
    --  pass the limit, W.Failed is set and further calls do nothing (the
@@ -67,8 +79,14 @@ package body Unishox with SPARK_Mode is
       Code   : Byte;
       Len    : Bit_Length)
    with
-     Pre  => Limit <= Output'Length and then W.Pos <= 8 * Limit,
-     Post => W.Pos <= 8 * Limit
+     Pre  => Limit <= Output'Length and then Output'Length <= Max_Length
+       and then W.Pos <= 8 * Limit,
+     Post => W.Pos <= 8 * Limit and then W.Pos >= W.Pos'Old
+       and then (if W.Failed'Old then W = W'Old)
+       and then (if not W.Failed'Old
+                 then W.Failed = (W.Pos'Old + Len > 8 * Limit))
+       and then (if not W.Failed then W.Pos = W.Pos'Old + Len)
+       and then Wrote (W'Old, W, Len, Limit)
    is
       Cur   : Natural;
       Idx   : Natural;
@@ -131,14 +149,27 @@ package body Unishox with SPARK_Mode is
    with
      Pre  => Output'Length <= Max_Length and then W.Pos <= 8 * Output'Length
        and then Fits (Value, N),
-     Post => W.Pos <= 8 * Output'Length
+     Post => W.Pos <= 8 * Output'Length and then W.Pos >= W.Pos'Old
+       and then (if W.Failed'Old then W = W'Old)
+       and then (if not W.Failed'Old
+                 then W.Failed = (W.Pos'Old + N > 8 * Output'Length))
+       and then (if not W.Failed then W.Pos = W.Pos'Old + N)
+       and then Wrote (W'Old, W, N, Output'Length)
    is
       Left : Natural := N;
       Take : Natural;
       B    : Byte;
    begin
       for Chunk in 1 .. 3 loop
-         pragma Loop_Invariant (Left <= 24 and W.Pos <= 8 * Output'Length);
+         pragma Loop_Invariant
+           (Left <= N and then Left <= 8 * (4 - Chunk)
+            and then W.Pos <= 8 * Output'Length
+            and then W.Pos >= W.Pos'Loop_Entry
+            and then (if W.Failed'Loop_Entry then W = W'Loop_Entry)
+            and then (if not W.Failed
+                      then W.Pos = W.Pos'Loop_Entry + (N - Left))
+            and then (if W.Failed and then not W.Failed'Loop_Entry
+                      then W.Pos'Loop_Entry + N > 8 * Output'Length));
          exit when Left = 0;
          Take := Natural'Min (8, Left);
          B := Byte (Interfaces.Shift_Right (U32 (Value), Left - Take) mod 256);
@@ -169,17 +200,24 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Pos (Output, E) and E.State = E.State'Old
                 and E.Is_All_Upper = E.Is_All_Upper'Old
                 and E.Prev_Uni = E.Prev_Uni'Old
+                and Wrote (E.W'Old, E.W, Len, Output'Length)
    is
    begin
       Append_Bits (Output, Output'Length, E.W, Code, Len);
    end Put_Bits;
 
+   --  Length of the switch code from State
+   function Switch_Bits (State : Set_Kind) return Natural is
+     (if State = Uni then 7 else 2);
+
    --  append_switch_code
    procedure Append_Switch_Code
      (Output : in out Byte_Array; Limit : Natural; W : in out Bit_Writer;
       State : Set_Kind)
-   with Pre  => Limit <= Output'Length and then W.Pos <= 8 * Limit,
+   with Pre  => Limit <= Output'Length and then Output'Length <= Max_Length
+                and then W.Pos <= 8 * Limit,
         Post => W.Pos <= 8 * Limit
+                and then Wrote (W'Old, W, Switch_Bits (State), Limit)
    is
    begin
       if State = Uni then
@@ -197,6 +235,8 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Pos (Output, E) and E.State = E.State'Old
                 and E.Is_All_Upper = E.Is_All_Upper'Old
                 and E.Prev_Uni = E.Prev_Uni'Old
+                and Wrote (E.W'Old, E.W, Switch_Bits (E.State) + HCode_Lens (Set),
+                           Output'Length)
    is
    begin
       Append_Switch_Code (Output, Output'Length, E.W, E.State);
