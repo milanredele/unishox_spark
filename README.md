@@ -11,8 +11,9 @@ can decode the other's output.
 
 Light-runtime discipline: no heap, no secondary stack, no exceptions, no tasking, no I/O
 (`unishox.adc`); every buffer is the caller's and at most 4096 bytes; every loop is
-bounded. GNATprove proves the absence of run-time errors (795 of 795 checks, see
-[PROOF.md](PROOF.md)), so the release build runs with checks off.
+bounded. GNATprove proves the absence of run-time errors, the bounds and frame of the output
+and a compressed-size bound (1,079 of 1,079 checks, see [PROOF.md](PROOF.md)), so the release
+build runs with checks off.
 
 ## API
 
@@ -29,7 +30,8 @@ package Unishox is
                          Output_Length : out Natural; Success : out Boolean);
    --  Pre:  Input'Length <= 4096 and Output'Length <= 4096
    --  Post: Output_Length <= Output'Length; if not Success, Output_Length = 0
-   --        and Output is all zero
+   --        and Output is all zero; the bytes after Output_Length are zero;
+   --        Compress: if Output'Length >= 4 * Input'Length + 1 then Success
 end Unishox;
 ```
 
@@ -47,9 +49,11 @@ caller must authenticate before decompressing (addendum section 5).
 |---|---|
 | `src/unishox.ads`, `src/unishox.adb` | the library; the body follows `unishox2.c` function by function |
 | `src/unishox-tables.ads` | the reference's code tables |
+| `src/unishox-tables-lemmas.ads`, `.adb` | ghost unit: the consistency of the tables, proved (no code in the release build) |
 | `unishox_spark.gpr`, `alire.toml`, `unishox.adc` | project (modes `release`, `debug`, `checks`, `bench`), crate, restrictions |
 | `prove.sh`, `PROOF.md` | GNATprove at level 2 and its results |
-| `tests/run.sh` | differential tests against the C reference |
+| `tests/run.sh` | differential tests against the C reference, on the checks build and on the release code |
+| `tests/exhaustive.sh`, `tests/coverage.sh`, `tests/run-target.sh` | bounded-exhaustive tests; GNATcoverage of the suite; the differential test run on the cross targets (macOS, iOS simulator, Android emulator) |
 | `bench/bench.sh` | object size and throughput |
 | `build-target.sh` | GNAT-LLVM cross build for iOS and Android (the toolchain of [ada-mobile](https://github.com/milanredele/ada-mobile)) |
 | `tools/prove.sh` | the proof runner shared with the FreedomChat core: all proved, no warning, a margin to the prover limits |
