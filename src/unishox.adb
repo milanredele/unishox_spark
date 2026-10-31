@@ -1467,8 +1467,14 @@ package body Unishox with SPARK_Mode is
       Status : out Rep_Status)
    with Pre  => Valid_Dec (Input, Output, D),
         Post => Valid_Dec (Input, Output, D)
-                and then (if Status = Rep_Ok then D.Bit_No > D.Bit_No'Old)
+                and then (if Status = Rep_Ok then D.Bit_No > D.Bit_No'Old),
+        Contract_Cases =>
+          (others => D.OL >= D.OL'Old
+                       and then Same_Below (Output'Old, Output, D.OL'Old)
+                       and then (if Dec_Zero_Tail (Output'Old, D.OL'Old)
+                                 then Dec_Zero_Tail (Output, D.OL)))
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       Count    : Natural;
       Dict_Len : Natural;
       Dist     : Natural;
@@ -1499,6 +1505,9 @@ package body Unishox with SPARK_Mode is
       Src := Dst - Dist;
       --  Source before destination: copying backwards is a memmove
       for K in reverse 0 .. Dict_Len - 1 loop
+         pragma Loop_Invariant
+           (Same_Below (Output'Loop_Entry, Output, D.OL)
+            and then Same_From (Output'Loop_Entry, Output, D.OL + Dict_Len));
          Output (Dst + K) := Output (Src + K);
       end loop;
       D.OL := D.OL + Dict_Len;
