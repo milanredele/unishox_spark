@@ -56,6 +56,26 @@ package body Unishox with SPARK_Mode is
       Failed : Boolean := False;  --  output limit reached
    end record;
 
+   --  The bytes from the first one not yet started by W are zero
+   function Zero_Tail (Output : Byte_Array; W : Bit_Writer) return Boolean is
+     (for all I in Output'Range =>
+        (if I - Output'First >= (W.Pos + 7) / 8 then Output (I) = 0))
+   with Ghost, Pre => W.Pos <= Max_Bits;
+
+   --  Output equals Old at the offsets below Upto
+   function Same_Below (Old, Output : Byte_Array; Upto : Natural)
+     return Boolean
+   is (for all I in Output'Range =>
+         (if I - Output'First < Upto then Output (I) = Old (I)))
+   with Ghost, Pre => Old'First = Output'First and then Old'Last = Output'Last;
+
+   --  Output equals Old at the offsets from From on
+   function Same_From (Old, Output : Byte_Array; From : Natural)
+     return Boolean
+   is (for all I in Output'Range =>
+         (if I - Output'First >= From then Output (I) = Old (I)))
+   with Ghost, Pre => Old'First = Output'First and then Old'Last = Output'Last;
+
    --  W advanced from Old by at most Bits bits within the limit of Limit
    --  bytes: nothing changes once failed, and a failure means that the
    --  bits did not fit (the exact counterpart is in the Post of
@@ -87,6 +107,9 @@ package body Unishox with SPARK_Mode is
                  then W.Failed = (W.Pos'Old + Len > 8 * Limit))
        and then (if not W.Failed then W.Pos = W.Pos'Old + Len)
        and then Wrote (W'Old, W, Len, Limit)
+       and then Same_Below (Output'Old, Output, W.Pos'Old / 8)
+       and then Same_From (Output'Old, Output, Limit)
+       and then (if Zero_Tail (Output'Old, W'Old) then Zero_Tail (Output, W))
    is
       Cur   : Natural;
       Idx   : Natural;
@@ -155,6 +178,7 @@ package body Unishox with SPARK_Mode is
                  then W.Failed = (W.Pos'Old + N > 8 * Output'Length))
        and then (if not W.Failed then W.Pos = W.Pos'Old + N)
        and then Wrote (W'Old, W, N, Output'Length)
+       and then (if Zero_Tail (Output'Old, W'Old) then Zero_Tail (Output, W))
    is
       Left : Natural := N;
       Take : Natural;
@@ -169,7 +193,9 @@ package body Unishox with SPARK_Mode is
             and then (if not W.Failed
                       then W.Pos = W.Pos'Loop_Entry + (N - Left))
             and then (if W.Failed and then not W.Failed'Loop_Entry
-                      then W.Pos'Loop_Entry + N > 8 * Output'Length));
+                      then W.Pos'Loop_Entry + N > 8 * Output'Length)
+            and then (if Zero_Tail (Output'Loop_Entry, W'Loop_Entry)
+                      then Zero_Tail (Output, W)));
          exit when Left = 0;
          Take := Natural'Min (8, Left);
          B := Byte (Interfaces.Shift_Right (U32 (Value), Left - Take) mod 256);
@@ -191,7 +217,9 @@ package body Unishox with SPARK_Mode is
    end record;
 
    function Valid_Pos (Output : Byte_Array; E : Encoder) return Boolean is
-     (Output'Length <= Max_Length and then E.W.Pos <= 8 * Output'Length);
+     (Output'Length <= Max_Length and then E.W.Pos <= 8 * Output'Length
+      and then Zero_Tail (Output, E.W))
+   with Ghost;
 
    procedure Put_Bits
      (Output : in out Byte_Array; E : in out Encoder; Code : Byte;
@@ -218,6 +246,9 @@ package body Unishox with SPARK_Mode is
                 and then W.Pos <= 8 * Limit,
         Post => W.Pos <= 8 * Limit
                 and then Wrote (W'Old, W, Switch_Bits (State), Limit)
+                and then Same_From (Output'Old, Output, Limit)
+                and then (if Zero_Tail (Output'Old, W'Old)
+                          then Zero_Tail (Output, W))
    is
    begin
       if State = Uni then

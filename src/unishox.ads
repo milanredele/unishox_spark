@@ -44,7 +44,9 @@ package Unishox with SPARK_Mode, Pure is
      Post => Output_Length <= Output'Length
        and then (if not Success
                  then Output_Length = 0
-                   and then (for all B of Output => B = 0));
+                   and then (for all B of Output => B = 0))
+       and then (for all I in Output'First + Output_Length .. Output'Last =>
+                   Output (I) = 0);
    --  Compresses Input (UTF-8 text, any bytes allowed) into
    --  Output (Output'First .. Output'First + Output_Length - 1), exactly as
    --  unishox2_compress_simple does. Success is False, Output_Length is 0
