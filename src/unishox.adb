@@ -1352,6 +1352,23 @@ package body Unishox with SPARK_Mode is
       Kind := U_Delta;
    end Read_Unicode;
 
+   --  The bytes from offset OL on are zero (a pass over Output, so used
+   --  in Contract_Cases and ignored loop invariants only, as Zero_Tail)
+   function Dec_Zero_Tail (Output : Byte_Array; OL : Natural) return Boolean
+   is (for all I in Output'Range =>
+         (if I - Output'First >= OL then Output (I) = 0))
+   with Ghost;
+
+   --  Output is Old with bytes appended at offset Old_OL: OL did not go
+   --  back, the bytes below Old_OL are unchanged and a zero tail stays
+   function Appended
+     (Old, Output : Byte_Array; Old_OL, OL : Natural) return Boolean
+   is (OL >= Old_OL
+       and then Same_Below (Old, Output, Old_OL)
+       and then (if Dec_Zero_Tail (Old, Old_OL)
+                 then Dec_Zero_Tail (Output, OL)))
+   with Ghost, Pre => Old'First = Output'First and then Old'Last = Output'Last;
+
    --  DEC_OUTPUT_CHAR: Overflow is sticky; the caller reports failure
    procedure Put
      (Output   : in out Byte_Array;
@@ -1370,7 +1387,8 @@ package body Unishox with SPARK_Mode is
                             and then Output (Output'First + OL'Old) = B
                             and then (for all I in Output'Range =>
                                         (if I /= Output'First + OL'Old
-                                         then Output (I) = Output'Old (I))))
+                                         then Output (I) = Output'Old (I)))),
+        Contract_Cases => (others => Appended (Output'Old, Output, OL'Old, OL))
    is
    begin
       if Overflow then
@@ -1392,7 +1410,8 @@ package body Unishox with SPARK_Mode is
       Uni      : U32;
       Overflow : in out Boolean)
    with Pre  => OL <= Output'Length,
-        Post => OL <= Output'Length
+        Post => OL <= Output'Length,
+        Contract_Cases => (others => Appended (Output'Old, Output, OL'Old, OL))
    is
       use Interfaces;
    begin
@@ -1451,8 +1470,11 @@ package body Unishox with SPARK_Mode is
       Status : out Rep_Status)
    with Pre  => Valid_Dec (Input, Output, D),
         Post => Valid_Dec (Input, Output, D)
-                and then (if Status = Rep_Ok then D.Bit_No > D.Bit_No'Old)
+                and then (if Status = Rep_Ok then D.Bit_No > D.Bit_No'Old),
+        Contract_Cases =>
+          (others => Appended (Output'Old, Output, D.OL'Old, D.OL))
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       Count    : Natural;
       Dict_Len : Natural;
       Dist     : Natural;
@@ -1483,6 +1505,9 @@ package body Unishox with SPARK_Mode is
       Src := Dst - Dist;
       --  Source before destination: copying backwards is a memmove
       for K in reverse 0 .. Dict_Len - 1 loop
+         pragma Loop_Invariant
+           (Same_Below (Output'Loop_Entry, Output, D.OL)
+            and then Same_From (Output'Loop_Entry, Output, D.OL + Dict_Len));
          Output (Dst + K) := Output (Src + K);
       end loop;
       D.OL := D.OL + Dict_Len;
@@ -1498,8 +1523,11 @@ package body Unishox with SPARK_Mode is
       Result : out Step_Result)
    with Pre  => Valid_Dec (Input, Output, D),
         Post => Valid_Dec (Input, Output, D)
-                and then (if Result = Go_On then D.Bit_No > D.Bit_No'Old)
+                and then (if Result = Go_On then D.Bit_No > D.Bit_No'Old),
+        Contract_Cases =>
+          (others => Appended (Output'Old, Output, D.OL'Old, D.OL))
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       Idx    : Natural;
       T      : Natural;
       Ok     : Boolean;
@@ -1533,6 +1561,8 @@ package body Unishox with SPARK_Mode is
             pragma Loop_Invariant (Valid_Dec (Input, Output, D)
                                    and then D.Bit_No > Start
                                    and then D.Bit_No <= 8 * Input'Length);
+            pragma Loop_Invariant
+              (Appended (Output'Loop_Entry, Output, D.OL'Loop_Entry, D.OL));
             CT := Templates (T).Text (J);
             if CT in 'f' | 'r' | 't' | 'o' | 'F' then
                N := (case CT is
@@ -1562,6 +1592,8 @@ package body Unishox with SPARK_Mode is
             pragma Loop_Invariant (Valid_Dec (Input, Output, D)
                                    and then D.Bit_No > Start
                                    and then D.Bit_No <= 8 * Input'Length);
+            pragma Loop_Invariant
+              (Appended (Output'Loop_Entry, Output, D.OL'Loop_Entry, D.OL));
             Get_Num_From_Bits (Input, D.Bit_No, 8, Raw, Ok);
             if not Ok then
                return;
@@ -1584,6 +1616,8 @@ package body Unishox with SPARK_Mode is
             pragma Loop_Invariant (Valid_Dec (Input, Output, D)
                                    and then D.Bit_No > Start
                                    and then D.Bit_No <= 8 * Input'Length);
+            pragma Loop_Invariant
+              (Appended (Output'Loop_Entry, Output, D.OL'Loop_Entry, D.OL));
             Get_Num_From_Bits (Input, D.Bit_No, 4, Raw, Ok);
             if not Ok then
                return;
@@ -1606,12 +1640,17 @@ package body Unishox with SPARK_Mode is
    procedure Put_Freq_Seq
      (Output : in out Byte_Array; D : in out Decoder; I : Freq_Index)
    with Pre  => D.OL <= Output'Length,
-        Post => D.OL <= Output'Length and then D.Bit_No = D.Bit_No'Old
+        Post => D.OL <= Output'Length and then D.Bit_No = D.Bit_No'Old,
+        Contract_Cases =>
+          (others => Appended (Output'Old, Output, D.OL'Old, D.OL))
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
    begin
       for K in 1 .. Freq_Seqs (I).Len loop
          pragma Loop_Invariant (D.OL <= Output'Length
                                 and then D.Bit_No = D.Bit_No'Loop_Entry);
+         pragma Loop_Invariant
+           (Appended (Output'Loop_Entry, Output, D.OL'Loop_Entry, D.OL));
          Put (Output, D.OL, Freq_Seqs (I).Text (K), D.Overflow);
       end loop;
    end Put_Freq_Seq;
@@ -1626,8 +1665,11 @@ package body Unishox with SPARK_Mode is
    with Pre  => Valid_Dec (Input, Output, D)
                 and then D.Bit_No < 8 * Input'Length,
         Post => Valid_Dec (Input, Output, D)
-                and then (if Result = Go_On then D.Bit_No > D.Bit_No'Old)
+                and then (if Result = Go_On then D.Bit_No > D.Bit_No'Old),
+        Contract_Cases =>
+          (others => Appended (Output'Old, Output, D.OL'Old, D.OL))
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       V        : VCode_Index;
       H2       : Set_Kind;
       Ok       : Boolean;
@@ -1800,6 +1842,8 @@ package body Unishox with SPARK_Mode is
             for K in 1 .. Count + 4 loop
                pragma Loop_Invariant (Valid_Dec (Input, Output, D)
                                       and then D.Bit_No = D.Bit_No'Loop_Entry);
+               pragma Loop_Invariant
+                 (Appended (Output'Loop_Entry, Output, D.OL'Loop_Entry, D.OL));
                Put (Output, D.OL, Rpt, D.Overflow);
                exit when D.Overflow;
             end loop;
@@ -1833,6 +1877,7 @@ package body Unishox with SPARK_Mode is
       Output_Length : out Natural;
       Success       : out Boolean)
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       D      : Decoder;
       Result : Step_Result := Go_On;
    begin
@@ -1843,6 +1888,7 @@ package body Unishox with SPARK_Mode is
          pragma Loop_Invariant (Valid_Dec (Input, Output, D)
                                 and then D.Bit_No >= Iter
                                 and then Result = Go_On);
+         pragma Loop_Invariant (Dec_Zero_Tail (Output, D.OL));
          exit when D.Bit_No >= 8 * Input'Length;
          Decode_Step (Input, Output, D, Result);
          exit when Result = Stop or else D.Overflow;
