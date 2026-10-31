@@ -47,13 +47,13 @@ package Unishox with SPARK_Mode, Pure is
                    and then (for all B of Output => B = 0))
        and then (for all I in Output'First + Output_Length .. Output'Last =>
                    Output (I) = 0)
-       and then (if Output'Length >= 8 * Input'Length + 1 then Success);
+       and then (if Output'Length >= 4 * Input'Length + 1 then Success);
    --  Compresses Input (UTF-8 text, any bytes allowed) into
    --  Output (Output'First .. Output'First + Output_Length - 1), exactly as
    --  unishox2_compress_simple does. Success is False, Output_Length is 0
    --  and Output is all zero if the result does not fit in Output. The
    --  bytes after the result are zero, and the result always fits in
-   --  8 * Input'Length + 1 bytes.
+   --  4 * Input'Length + 1 bytes.
 
    procedure Decompress
      (Input         : Byte_Array;

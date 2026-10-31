@@ -96,7 +96,7 @@ package body Unishox with SPARK_Mode is
 
    --  Expansion bound: an encoding step that consumes K input bytes writes
    --  at most Byte_Bits * K bits
-   Byte_Bits : constant := 64;
+   Byte_Bits : constant := 32;
 
    --  append_bits: appends the Len most significant bits of Code at bit
    --  W.Pos, without writing at or beyond byte Limit. Once a write would
@@ -790,6 +790,7 @@ package body Unishox with SPARK_Mode is
            (E = E'Loop_Entry and then L = L'Loop_Entry
             and then Output = Output'Loop_Entry and then not Handled);
          Tlen := Templates (I).Len;
+         pragma Assert (Tlen >= 8);   --  so a match covers at least 6 bytes
          J := 0;
          while J < Tlen and then L + J < Len
            and then Template_Accepts (Templates (I).Text (J + 1),
@@ -954,6 +955,8 @@ package body Unishox with SPARK_Mode is
             else
                Idx := Natural (C_In) - 33;
             end if;
+            --  A letter is coded in the Alpha set (expansion bound)
+            pragma Assert (if Is_Upper then Code_94 (Idx).Set = Alpha);
             Append_Code (Output, E, Code_94 (Idx));
          end if;
       elsif C_In = 13 and then C_Next = 10 then
