@@ -1359,6 +1359,16 @@ package body Unishox with SPARK_Mode is
          (if I - Output'First >= OL then Output (I) = 0))
    with Ghost;
 
+   --  Output is Old with bytes appended at offset Old_OL: OL did not go
+   --  back, the bytes below Old_OL are unchanged and a zero tail stays
+   function Appended
+     (Old, Output : Byte_Array; Old_OL, OL : Natural) return Boolean
+   is (OL >= Old_OL
+       and then Same_Below (Old, Output, Old_OL)
+       and then (if Dec_Zero_Tail (Old, Old_OL)
+                 then Dec_Zero_Tail (Output, OL)))
+   with Ghost, Pre => Old'First = Output'First and then Old'Last = Output'Last;
+
    --  DEC_OUTPUT_CHAR: Overflow is sticky; the caller reports failure
    procedure Put
      (Output   : in out Byte_Array;
@@ -1378,10 +1388,7 @@ package body Unishox with SPARK_Mode is
                             and then (for all I in Output'Range =>
                                         (if I /= Output'First + OL'Old
                                          then Output (I) = Output'Old (I)))),
-        Contract_Cases =>
-          (others => Same_Below (Output'Old, Output, OL'Old)
-                       and then (if Dec_Zero_Tail (Output'Old, OL'Old)
-                                 then Dec_Zero_Tail (Output, OL)))
+        Contract_Cases => (others => Appended (Output'Old, Output, OL'Old, OL))
    is
    begin
       if Overflow then
@@ -1404,11 +1411,7 @@ package body Unishox with SPARK_Mode is
       Overflow : in out Boolean)
    with Pre  => OL <= Output'Length,
         Post => OL <= Output'Length,
-        Contract_Cases =>
-          (others => OL >= OL'Old
-                       and then Same_Below (Output'Old, Output, OL'Old)
-                       and then (if Dec_Zero_Tail (Output'Old, OL'Old)
-                                 then Dec_Zero_Tail (Output, OL)))
+        Contract_Cases => (others => Appended (Output'Old, Output, OL'Old, OL))
    is
       use Interfaces;
    begin
@@ -1469,10 +1472,7 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Dec (Input, Output, D)
                 and then (if Status = Rep_Ok then D.Bit_No > D.Bit_No'Old),
         Contract_Cases =>
-          (others => D.OL >= D.OL'Old
-                       and then Same_Below (Output'Old, Output, D.OL'Old)
-                       and then (if Dec_Zero_Tail (Output'Old, D.OL'Old)
-                                 then Dec_Zero_Tail (Output, D.OL)))
+          (others => Appended (Output'Old, Output, D.OL'Old, D.OL))
    is
       pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       Count    : Natural;
@@ -1523,8 +1523,11 @@ package body Unishox with SPARK_Mode is
       Result : out Step_Result)
    with Pre  => Valid_Dec (Input, Output, D),
         Post => Valid_Dec (Input, Output, D)
-                and then (if Result = Go_On then D.Bit_No > D.Bit_No'Old)
+                and then (if Result = Go_On then D.Bit_No > D.Bit_No'Old),
+        Contract_Cases =>
+          (others => Appended (Output'Old, Output, D.OL'Old, D.OL))
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       Idx    : Natural;
       T      : Natural;
       Ok     : Boolean;
@@ -1558,6 +1561,8 @@ package body Unishox with SPARK_Mode is
             pragma Loop_Invariant (Valid_Dec (Input, Output, D)
                                    and then D.Bit_No > Start
                                    and then D.Bit_No <= 8 * Input'Length);
+            pragma Loop_Invariant
+              (Appended (Output'Loop_Entry, Output, D.OL'Loop_Entry, D.OL));
             CT := Templates (T).Text (J);
             if CT in 'f' | 'r' | 't' | 'o' | 'F' then
                N := (case CT is
@@ -1587,6 +1592,8 @@ package body Unishox with SPARK_Mode is
             pragma Loop_Invariant (Valid_Dec (Input, Output, D)
                                    and then D.Bit_No > Start
                                    and then D.Bit_No <= 8 * Input'Length);
+            pragma Loop_Invariant
+              (Appended (Output'Loop_Entry, Output, D.OL'Loop_Entry, D.OL));
             Get_Num_From_Bits (Input, D.Bit_No, 8, Raw, Ok);
             if not Ok then
                return;
@@ -1609,6 +1616,8 @@ package body Unishox with SPARK_Mode is
             pragma Loop_Invariant (Valid_Dec (Input, Output, D)
                                    and then D.Bit_No > Start
                                    and then D.Bit_No <= 8 * Input'Length);
+            pragma Loop_Invariant
+              (Appended (Output'Loop_Entry, Output, D.OL'Loop_Entry, D.OL));
             Get_Num_From_Bits (Input, D.Bit_No, 4, Raw, Ok);
             if not Ok then
                return;
@@ -1633,10 +1642,7 @@ package body Unishox with SPARK_Mode is
    with Pre  => D.OL <= Output'Length,
         Post => D.OL <= Output'Length and then D.Bit_No = D.Bit_No'Old,
         Contract_Cases =>
-          (others => D.OL >= D.OL'Old
-                       and then Same_Below (Output'Old, Output, D.OL'Old)
-                       and then (if Dec_Zero_Tail (Output'Old, D.OL'Old)
-                                 then Dec_Zero_Tail (Output, D.OL)))
+          (others => Appended (Output'Old, Output, D.OL'Old, D.OL))
    is
       pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
    begin
@@ -1644,10 +1650,7 @@ package body Unishox with SPARK_Mode is
          pragma Loop_Invariant (D.OL <= Output'Length
                                 and then D.Bit_No = D.Bit_No'Loop_Entry);
          pragma Loop_Invariant
-           (D.OL >= D.OL'Loop_Entry
-            and then Same_Below (Output'Loop_Entry, Output, D.OL'Loop_Entry)
-            and then (if Dec_Zero_Tail (Output'Loop_Entry, D.OL'Loop_Entry)
-                      then Dec_Zero_Tail (Output, D.OL)));
+           (Appended (Output'Loop_Entry, Output, D.OL'Loop_Entry, D.OL));
          Put (Output, D.OL, Freq_Seqs (I).Text (K), D.Overflow);
       end loop;
    end Put_Freq_Seq;
