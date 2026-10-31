@@ -64,9 +64,11 @@ override). `GNATPROVE=<path>/bin/gnatprove ./prove.sh` runs the proof.
 
 ## Tests
 
-`tests/run.sh` builds the reference with clang (`-fwrapv`, and `UNISHOX_API_WITH_OUTPUT_LEN`
-for the bounded decoder used in fuzzing; the `*_simple` functions are unchanged by it), the
-library with all checks and contracts on, and runs:
+`tests/run.sh` builds the reference with clang (`tests/build-ref.sh`: `-fwrapv`, and
+`UNISHOX_API_WITH_OUTPUT_LEN` for the bounded decoder used in fuzzing; the `*_simple` functions
+are unchanged by it) and the test program twice: against the library with all checks and
+contracts on (mode `checks`), and against the code that ships (mode `bench`: the release
+switches `-O2 -gnatp -gnatn`, without the partition-wide restrictions). Each program runs:
 
 1. **Corpus** (`tests/corpus.txt`, written by `tests/gen_corpus.py`, 547 strings): the five
    samples of FreedomChat's compression benchmark (`experiments/compression-bench/samples.py`
@@ -91,8 +93,29 @@ larger than 4096 bytes (random bytes expand) must make `Compress` fail. For ever
 case, the Ada decoder must produce exactly the reference's output when it fits, and fail
 otherwise.
 
-Result: `checks: 100547 (13 with output > 4096 bytes), decoder fuzz: 100000, failures: 0`,
-about 18 s.
+The checks are in `tests/src/diff_check.adb`. Both programs must pass and print the same.
+Result, for each: `checks: 100547 (13 with output > 4096 bytes), decoder fuzz: 100000,
+failures: 0`; about 30 s for both.
+
+`tests/exhaustive.sh` (CI, after the differential tests; `checks` mode, about 20 s) is
+bounded-exhaustive: the decoder check on every input of 1, 2 and 3 bytes (16,843,008 inputs) at
+the output limits 0, 1, 7, 64 and 4096, and the full check on every input of at most 2 bytes
+and on every 3-byte string over a 40-character alphabet (letters of both cases, digits, space,
+CR, LF, punctuation, the two bytes of `é`): 84,215,040 decoder checks and 129,793 full
+checks, no failure.
+
+`tests/coverage.sh` (local; `GNATCOV=<path>/bin/gnatcov`, from `alr get gnatcov_bin`) measures
+source coverage of the `checks` build under the differential suite with GNATcoverage:
+`Encode_Char` and `Decode_Step` have 100% statement and decision coverage (25 and 42
+decisions) and 97% and 96% MC/DC; `unishox.adb` as a whole 99% of statements and 98% of
+decisions. The uncovered outcomes are defensive: `Base_Code` on a non-hexadecimal byte, a
+zero-width read in `Get_Num_From_Bits`, a failed read in `Read_Count` and `Read_Unicode`
+(their callers have checked that the bits are there), and the ghost validity functions
+never false. The MC/DC gaps: in `Encode_Char`, all-upper mode implies an upper-case letter
+(it is left before any other character, as in the reference); in `Decode_Step`, the symbol set
+has no zero below code 25 other than CR LF (code 8, handled before), and no input has made a
+successful switch code end exactly at the end of the input. The exhaustive tests cover none of
+them either.
 
 ## Compression ratios
 
@@ -142,6 +165,16 @@ with the restrictions of `unishox.adc`. The only undefined symbol is `memset` (A
 `_bzero` (iOS: LLVM's AArch64 back end turns a zero memset of variable size into `bzero`,
 which libSystem provides). No GNAT runtime symbol, no secondary stack, no exception
 handling.
+
+`tests/run-target.sh [triple...]` (local only: it needs the same toolchain, Xcode, the Android
+NDK, a booted iOS simulator and an online Android emulator or device) runs the differential
+checks on the cross-compiled code: it compiles the library as `build-target.sh` does, with the
+C interface `tests/cross/unishox_c.adb`, links it with the reference and the C driver
+`tests/cross/cross_test.c` for the target, and runs the corpus, 100,000 random round trips and
+100,000 decoder fuzz cases (fixed seed) on macOS (host), the iOS simulator (`simctl spawn`)
+and Android (`adb`); the iOS device build is linked only. The driver prints a digest of every
+Ada output, which must be the same on all targets. Result: all three pass with the same
+digest, about 12 s per target.
 
 ## Deviations from the reference
 
