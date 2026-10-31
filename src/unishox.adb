@@ -1360,6 +1360,17 @@ package body Unishox with SPARK_Mode is
       Overflow : in out Boolean)
    with Pre  => OL <= Output'Length,
         Post => OL <= Output'Length
+                and then (if Overflow'Old then Overflow)
+                and then (if Overflow
+                          then OL = OL'Old and then Output = Output'Old)
+                and then (if Overflow and then not Overflow'Old
+                          then OL'Old = Output'Length)
+                and then (if not Overflow
+                          then OL = OL'Old + 1
+                            and then Output (Output'First + OL'Old) = B
+                            and then (for all I in Output'Range =>
+                                        (if I /= Output'First + OL'Old
+                                         then Output (I) = Output'Old (I))))
    is
    begin
       if Overflow then
