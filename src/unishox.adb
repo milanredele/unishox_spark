@@ -1403,7 +1403,12 @@ package body Unishox with SPARK_Mode is
       Uni      : U32;
       Overflow : in out Boolean)
    with Pre  => OL <= Output'Length,
-        Post => OL <= Output'Length
+        Post => OL <= Output'Length,
+        Contract_Cases =>
+          (others => OL >= OL'Old
+                       and then Same_Below (Output'Old, Output, OL'Old)
+                       and then (if Dec_Zero_Tail (Output'Old, OL'Old)
+                                 then Dec_Zero_Tail (Output, OL)))
    is
       use Interfaces;
    begin
@@ -1617,12 +1622,23 @@ package body Unishox with SPARK_Mode is
    procedure Put_Freq_Seq
      (Output : in out Byte_Array; D : in out Decoder; I : Freq_Index)
    with Pre  => D.OL <= Output'Length,
-        Post => D.OL <= Output'Length and then D.Bit_No = D.Bit_No'Old
+        Post => D.OL <= Output'Length and then D.Bit_No = D.Bit_No'Old,
+        Contract_Cases =>
+          (others => D.OL >= D.OL'Old
+                       and then Same_Below (Output'Old, Output, D.OL'Old)
+                       and then (if Dec_Zero_Tail (Output'Old, D.OL'Old)
+                                 then Dec_Zero_Tail (Output, D.OL)))
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
    begin
       for K in 1 .. Freq_Seqs (I).Len loop
          pragma Loop_Invariant (D.OL <= Output'Length
                                 and then D.Bit_No = D.Bit_No'Loop_Entry);
+         pragma Loop_Invariant
+           (D.OL >= D.OL'Loop_Entry
+            and then Same_Below (Output'Loop_Entry, Output, D.OL'Loop_Entry)
+            and then (if Dec_Zero_Tail (Output'Loop_Entry, D.OL'Loop_Entry)
+                      then Dec_Zero_Tail (Output, D.OL)));
          Put (Output, D.OL, Freq_Seqs (I).Text (K), D.Overflow);
       end loop;
    end Put_Freq_Seq;
