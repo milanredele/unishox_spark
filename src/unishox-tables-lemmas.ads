@@ -18,16 +18,18 @@
 
 package Unishox.Tables.Lemmas with Ghost, SPARK_Mode => On is
 
-   --  2 ** N as a shift: GNATprove evaluates a shift by a table entry,
-   --  not a power with a non-static exponent
-   function Pow2 (N : Natural) return Natural is
-     (Natural (Interfaces.Shift_Left (Interfaces.Unsigned_32'(1), N)))
-   with Pre => N <= 30;
+   --  2 ** N as a table of literals: the provers look up an entry where
+   --  they would have to unfold a power with a non-static exponent (and
+   --  powers in the aggregate would bring the power axioms everywhere)
+   Pow2 : constant array (0 .. 24) of Positive :=
+     (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048,
+      4096, 8192, 16_384, 32_768, 65_536, 131_072, 262_144,
+      524_288, 1_048_576, 2_097_152, 4_194_304, 8_388_608, 16_777_216);
 
    procedure Lemma_Pow2
    with Global => null,
         Post   => Pow2 (0) = 1
-                  and then (for all N in 1 .. 30 => Pow2 (N) = 2 * Pow2 (N - 1));
+                  and then (for all N in 1 .. 24 => Pow2 (N) = 2 * Pow2 (N - 1));
 
    --  The masks keep the Len most significant bits
    procedure Lemma_Masks

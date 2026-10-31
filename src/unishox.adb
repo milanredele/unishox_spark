@@ -106,16 +106,31 @@ package body Unishox with SPARK_Mode is
       end if;
    end Append_Bits;
 
+   --  2 ** N as a table of literals (as Pow2 of Unishox.Tables.Lemmas,
+   --  which this Pure unit cannot depend on): the provers look up an entry
+   --  where they would have to unfold a power with a non-static exponent
+   Pow2 : constant array (0 .. 24) of Positive :=
+     (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048,
+      4096, 8192, 16_384, 32_768, 65_536, 131_072, 262_144,
+      524_288, 1_048_576, 2_097_152, 4_194_304, 8_388_608, 16_777_216)
+   with Ghost;
+
+   --  Value fits in N bits (Value < 2 ** N)
+   function Fits (Value, N : Natural) return Boolean is
+     (N in 1 .. 24 and then Value < Pow2 (N))
+   with Ghost;
+
    --  Appends the N low-order bits of Value, most significant first
-   --  (the multi-call sequences of encodeCount and encodeUnicode).
+   --  (the multi-call sequences of encodeCount and encodeUnicode). Value
+   --  must fit in N bits, so no wrong table entry can drop bits silently.
    procedure Append_Value
      (Output : in out Byte_Array;
       W      : in out Bit_Writer;
-      Value  : U32;
+      Value  : Natural;
       N      : Natural)
    with
-     Pre  => N <= 24 and then W.Pos <= 8 * Output'Length
-       and then Output'Length <= Max_Length,
+     Pre  => Output'Length <= Max_Length and then W.Pos <= 8 * Output'Length
+       and then Fits (Value, N),
      Post => W.Pos <= 8 * Output'Length
    is
       Left : Natural := N;
@@ -126,7 +141,7 @@ package body Unishox with SPARK_Mode is
          pragma Loop_Invariant (Left <= 24 and W.Pos <= 8 * Output'Length);
          exit when Left = 0;
          Take := Natural'Min (8, Left);
-         B := Byte (Interfaces.Shift_Right (Value, Left - Take) mod 256);
+         B := Byte (Interfaces.Shift_Right (U32 (Value), Left - Take) mod 256);
          Append_Bits (Output, Output'Length, W,
                       Interfaces.Shift_Left (B, 8 - Take), Take);
          Left := Left - Take;
@@ -230,7 +245,7 @@ package body Unishox with SPARK_Mode is
             Put_Bits (Output, E, Count_Prefix (I), Count_Prefix_Len (I));
             Append_Value
               (Output, E.W,
-               U32 (Count - (if I = 0 then 0 else Count_Adder (I - 1))),
+               Count - (if I = 0 then 0 else Count_Adder (I - 1)),
                Count_Bit_Lens (I));
             return;
          end if;
@@ -253,7 +268,7 @@ package body Unishox with SPARK_Mode is
             Put_Bits (Output, E, Uni_Prefix (I), Uni_Prefix_Len (I));
             Put_Bits (Output, E, (if Prev > Code then 16#80# else 0), 1);
             Append_Value
-              (Output, E.W, U32 (Diff - Uni_Adder (I)), Uni_Bit_Len (I));
+              (Output, E.W, Diff - Uni_Adder (I), Uni_Bit_Len (I));
             return;
          end if;
       end loop;
