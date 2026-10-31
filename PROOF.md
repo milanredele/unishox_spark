@@ -6,7 +6,11 @@ release configuration (with the light-runtime restrictions of `unishox.adc`):
     gnatprove -P unishox_spark.gpr --level=2 --mode=all --checks-as-errors=on
 
 Result on 2026-10-21: **all 795 checks proved, none unproved, none justified**
-(no `pragma Annotate`, no `Assume`). About 40 s wall-clock on an Apple M5 (`-j0`).
+(no `pragma Annotate`, no `Assume`). About 40 s wall-clock on an Apple M5 (`-j0`). The
+prover shares in the table are those of that run, a fresh proof without the result cache
+(`prove.sh` normally replays cached results, which makes the shares of a local run
+meaningless; the CI run, `.github/workflows/ci.yml`, has no cache and is the authoritative
+proof).
 
 | category | checks | how |
 |---|---|---|
@@ -15,6 +19,12 @@ Result on 2026-10-21: **all 795 checks proved, none unproved, none justified**
 | Run-time checks (index, overflow, range, division) | 396 | CVC5 99 %, Z3 1 % |
 | Assertions (loop invariants, one assertion) | 43 | CVC5 98 %, Z3 2 % |
 | Functional contracts (pre/postconditions) | 224 | CVC5 94 %, Z3 3 %, trivial 2 % |
+
+The "functional contracts" are 193 precondition checks at call sites and 31 postconditions.
+The preconditions carry the bounds the run-time checks need from caller to callee
+(`Valid_Pos`, `Valid_Bits`, `OL <= Output'Length`); the postconditions are bounds and frame
+conditions. None of them describes the content of the compressed or decompressed bytes:
+that is what the differential tests cover (below).
 | Termination (loop variants, subprogram termination) | 23 | flow 15, CVC5 8 |
 | **Total** | **795** | |
 
@@ -34,9 +44,14 @@ What is proved:
   `while (bit_no < len)` loop decodes.
 
 What is not proved (it is tested instead, see `tests/`): functional equivalence with the C
-reference and the round-trip property `Decompress (Compress (X)) = X`. Both are checked
-differentially on 547 corpus strings, 100,000 random round trips and 100,000 decoder fuzz
-cases on every run of `tests/run.sh`.
+reference, the round-trip property `Decompress (Compress (X)) = X`, and that `Success` is
+False only when the result does not fit (the code sets the failure flags only on a write at
+the limit, and the tests check exact-size success and one-byte-less failure for every input).
+The equivalence and the round trip are checked differentially on 547 corpus strings, 100,000
+random round trips and 100,000 decoder fuzz cases on every run of `tests/run.sh`. The time
+bound of the decoder (work linear in the input bits plus the output length) holds by
+inspection, as every inner loop stops on input exhaustion or output overflow; termination is
+proved, the cost is not.
 
 Proof-relevant design choices:
 
@@ -48,5 +63,17 @@ Proof-relevant design choices:
 - Byte fields are decoded with `mod` and `/` instead of `and`/shift masks where a bound is
   needed (`B / 32 = 6` for `(b & 0xE0) == 0xC0`, the vertical-code section lookup written
   as five explicit ranges), which keeps the proofs in linear integer arithmetic.
-- The table component subtypes carry the bounds the proofs need (for example code lengths
-  `1 .. 8`, bit counts `1 .. 21`), so no proof depends on reading individual table entries.
+- The table component subtypes carry the bounds most proofs need (for example code lengths
+  `1 .. 8`, bit counts `1 .. 21`). Three loops are unrolled by GNATprove instead of carrying
+  an invariant (over `Level` in `Encode_Count` and `Encode_Unicode`, over `Template_Index` in
+  `Try_Template`), and their checks are proved per iteration from the concrete table values
+  (the range check on the count adder, for one). The tables are constants, so this is sound,
+  but editing a table can change what is provable.
+
+What the proof assumes of the caller:
+
+- `Input` and `Output` do not overlap. SPARK forbids the aliasing and checks it in SPARK
+  callers; an Ada caller may legally pass the same array as both (`Compress (X, X, ...)`),
+  which the proof does not cover: `Output` is zeroed first, so the result is garbage.
+- The parameters are within their subtypes (`Byte` is modular, so every bit pattern is valid;
+  the `out` parameters need no valid value on entry).

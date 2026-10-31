@@ -36,7 +36,8 @@ end Unishox;
 The result is `Output (Output'First .. Output'First + Output_Length - 1)`. `Success` is
 False only when the result does not fit in `Output`: a compressed text larger than the
 buffer, or a decompressed text larger than the buffer (the bound that rules out
-decompression bombs). Malformed compressed input is not an error: like the reference, the
+decompression bombs); this is tested, not proved. `Input` and `Output` must not overlap: SPARK
+callers are checked for it, an Ada caller that passes the same array twice gets garbage. Malformed compressed input is not an error: like the reference, the
 decoder stops where the stream stops making sense and returns what it has decoded, so the
 caller must authenticate before decompressing (addendum section 5).
 
