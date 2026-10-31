@@ -99,7 +99,11 @@ package body Diff_Check is
       end if;
    end Check;
 
-   procedure Check_Decoder (Name : String; Input : Byte_Array; Limit : Natural)
+   procedure Check_Decoder
+     (Name   : String;
+      Input  : Byte_Array;
+      Limit  : Natural;
+      C_Size : Positive := Big_Size)
    is
       C_Len : Int;
       P_Len : Natural;
@@ -107,7 +111,7 @@ package body Diff_Check is
    begin
       Fuzz_Checks := Fuzz_Checks + 1;
       C_Len := Ref_Decompress_Bounded
-        (Input'Address, Int (Input'Length), C_Plain'Address, Big_Size);
+        (Input'Address, Int (Input'Length), C_Plain'Address, Int (C_Size));
       Decompress (Input, A_Plain (1 .. Limit), P_Len, Ok);
       if Integer (C_Len) <= Limit then
          if not Ok or else P_Len /= Natural (C_Len)

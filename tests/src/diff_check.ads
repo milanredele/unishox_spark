@@ -49,8 +49,15 @@ package Diff_Check is
 
    --  Decoder check on arbitrary (usually malformed) input with an output
    --  limit: the Ada result must equal the reference whenever the
-   --  reference output fits, and be a failure otherwise.
-   procedure Check_Decoder (Name : String; Input : Byte_Array; Limit : Natural)
-   with Pre => Limit <= Max_Length;
+   --  reference output fits, and be a failure otherwise. C_Size is the
+   --  output buffer of the reference (its bounded decoder stops beyond
+   --  it): more than Limit, smaller than the default only to save time.
+   procedure Check_Decoder
+     (Name   : String;
+      Input  : Byte_Array;
+      Limit  : Natural;
+      C_Size : Positive := Big_Size)
+   with Pre => Limit <= Max_Length and then C_Size > Limit
+               and then C_Size <= Big_Size;
 
 end Diff_Check;

@@ -20,13 +20,7 @@ if ! cmp -s "$B/corpus.txt" "$HERE/corpus.txt"; then
   echo "tests/corpus.txt is out of date with gen_corpus.py" >&2; exit 1
 fi
 
-# The reference: -fwrapv because malformed input can overflow its int arithmetic
-clang -O2 -fwrapv -w -DUNISHOX_API_WITH_OUTPUT_LEN=1 -I"$ROOT/reference" \
-  -c "$ROOT/reference/unishox2.c" -o "$B/unishox2.o"
-clang -O2 -Wall -DUNISHOX_API_WITH_OUTPUT_LEN=1 -I"$ROOT/reference" \
-  -c "$HERE/c/ref_wrap.c" -o "$B/ref_wrap.o"
-rm -f "$B/libunishox2_ref.a"
-ar rcs "$B/libunishox2_ref.a" "$B/unishox2.o" "$B/ref_wrap.o"
+"$HERE/build-ref.sh"
 
 for mode in checks bench; do
   gprbuild -q -p -P "$HERE/tests.gpr" -XUNISHOX_BUILD_MODE=$mode > "$B/build-$mode.log" 2>&1 \

@@ -25,8 +25,11 @@ jobs:
       - name: Build (release)
         run: alr -n exec -- ./build.sh release
 
-      - name: Differential tests against the C reference
+      - name: Differential tests against the C reference (checks and release code)
         run: alr -n exec -- tests/run.sh
+
+      - name: Bounded-exhaustive differential tests
+        run: alr -n exec -- tests/exhaustive.sh
 
       - name: Fetch GNATprove 16.1.0
         run: |
