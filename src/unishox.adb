@@ -1665,8 +1665,11 @@ package body Unishox with SPARK_Mode is
    with Pre  => Valid_Dec (Input, Output, D)
                 and then D.Bit_No < 8 * Input'Length,
         Post => Valid_Dec (Input, Output, D)
-                and then (if Result = Go_On then D.Bit_No > D.Bit_No'Old)
+                and then (if Result = Go_On then D.Bit_No > D.Bit_No'Old),
+        Contract_Cases =>
+          (others => Appended (Output'Old, Output, D.OL'Old, D.OL))
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       V        : VCode_Index;
       H2       : Set_Kind;
       Ok       : Boolean;
@@ -1839,6 +1842,8 @@ package body Unishox with SPARK_Mode is
             for K in 1 .. Count + 4 loop
                pragma Loop_Invariant (Valid_Dec (Input, Output, D)
                                       and then D.Bit_No = D.Bit_No'Loop_Entry);
+               pragma Loop_Invariant
+                 (Appended (Output'Loop_Entry, Output, D.OL'Loop_Entry, D.OL));
                Put (Output, D.OL, Rpt, D.Overflow);
                exit when D.Overflow;
             end loop;
