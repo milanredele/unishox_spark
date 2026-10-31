@@ -243,6 +243,15 @@ package body Unishox with SPARK_Mode is
       Append_Bits (Output, Output'Length, E.W, HCodes (Set), HCode_Lens (Set));
    end Switch_To;
 
+   --  Bits that append_code writes for Code from State
+   function Code_Bits (State : Set_Kind; Code : Set_Code) return Natural is
+     ((if (Code.Set = Alpha and then State = Alpha)
+         or else (Code.Set = Num and then State = Num)
+       then 0
+       else Switch_Bits (State) + HCode_Lens (Code.Set))
+      + VCode_Lens (Code.V))
+   with Ghost;
+
    --  append_code
    procedure Append_Code
      (Output : in out Byte_Array; E : in out Encoder; Code : Set_Code)
@@ -250,6 +259,8 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Pos (Output, E)
                 and E.Is_All_Upper = E.Is_All_Upper'Old
                 and E.Prev_Uni = E.Prev_Uni'Old
+                and Wrote (E.W'Old, E.W, Code_Bits (E.State'Old, Code),
+                           Output'Length)
    is
    begin
       case Code.Set is
@@ -271,6 +282,12 @@ package body Unishox with SPARK_Mode is
       Put_Bits (Output, E, VCodes (Code.V), VCode_Lens (Code.V));
    end Append_Code;
 
+   --  Bits that encodeCount writes for Count (prefix and value)
+   function Count_Bits (Count : Natural) return Natural is
+     (if Count < 4 then 3 elsif Count < 20 then 6 elsif Count < 148 then 10
+      elsif Count < 2196 then 15 else 20)
+   with Ghost;
+
    --  encodeCount
    procedure Encode_Count
      (Output : in out Byte_Array; E : in out Encoder; Count : Natural)
@@ -278,6 +295,7 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Pos (Output, E) and E.State = E.State'Old
                 and E.Is_All_Upper = E.Is_All_Upper'Old
                 and E.Prev_Uni = E.Prev_Uni'Old
+                and Wrote (E.W'Old, E.W, Count_Bits (Count), Output'Length)
    is
    begin
       for I in Level loop
@@ -300,6 +318,7 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Pos (Output, E) and E.State = E.State'Old
                 and E.Is_All_Upper = E.Is_All_Upper'Old
                 and E.Prev_Uni = E.Prev_Uni'Old
+                and Wrote (E.W'Old, E.W, 27, Output'Length)
    is
       Diff : constant Natural := abs (Code - Prev);
    begin
@@ -321,6 +340,8 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Pos (Output, E) and E.State = E.State'Old
                 and E.Is_All_Upper = E.Is_All_Upper'Old
                 and E.Prev_Uni = E.Prev_Uni'Old
+                and Wrote (E.W'Old, E.W, Switch_Bits (E.State) + 4,
+                           Output'Length)
    is
    begin
       Switch_To (Output, E, Num);
