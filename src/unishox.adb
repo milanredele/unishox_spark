@@ -1352,6 +1352,13 @@ package body Unishox with SPARK_Mode is
       Kind := U_Delta;
    end Read_Unicode;
 
+   --  The bytes from offset OL on are zero (a pass over Output, so used
+   --  in Contract_Cases and ignored loop invariants only, as Zero_Tail)
+   function Dec_Zero_Tail (Output : Byte_Array; OL : Natural) return Boolean
+   is (for all I in Output'Range =>
+         (if I - Output'First >= OL then Output (I) = 0))
+   with Ghost;
+
    --  DEC_OUTPUT_CHAR: Overflow is sticky; the caller reports failure
    procedure Put
      (Output   : in out Byte_Array;
@@ -1370,7 +1377,11 @@ package body Unishox with SPARK_Mode is
                             and then Output (Output'First + OL'Old) = B
                             and then (for all I in Output'Range =>
                                         (if I /= Output'First + OL'Old
-                                         then Output (I) = Output'Old (I))))
+                                         then Output (I) = Output'Old (I)))),
+        Contract_Cases =>
+          (others => Same_Below (Output'Old, Output, OL'Old)
+                       and then (if Dec_Zero_Tail (Output'Old, OL'Old)
+                                 then Dec_Zero_Tail (Output, OL)))
    is
    begin
       if Overflow then
