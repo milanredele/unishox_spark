@@ -247,7 +247,8 @@ package body Unishox with SPARK_Mode is
 
    --  Length of the switch code from State
    function Switch_Bits (State : Set_Kind) return Natural is
-     (if State = Uni then 7 else 2);
+     (if State = Uni then 7 else 2)
+   with Ghost;
 
    --  append_switch_code
    procedure Append_Switch_Code
