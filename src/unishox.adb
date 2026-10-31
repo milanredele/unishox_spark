@@ -56,6 +56,48 @@ package body Unishox with SPARK_Mode is
       Failed : Boolean := False;  --  output limit reached
    end record;
 
+   --  The bytes from the first one not yet started by W are zero.
+   --  Zero_Tail and the frame functions below cost a pass over Output
+   --  (and Output'Old a copy of it) at every check, so the contracts that
+   --  use them are stated as Contract_Cases and loop invariants with the
+   --  policy Ignore: proved by GNATprove, not executed in the checks build.
+   pragma Assertion_Policy (Contract_Cases => Ignore);
+
+   function Zero_Tail (Output : Byte_Array; W : Bit_Writer) return Boolean is
+     (for all I in Output'Range =>
+        (if I - Output'First >= (W.Pos + 7) / 8 then Output (I) = 0))
+   with Ghost, Pre => W.Pos <= Max_Bits;
+
+   --  Output equals Old at the offsets below Upto
+   function Same_Below (Old, Output : Byte_Array; Upto : Natural)
+     return Boolean
+   is (for all I in Output'Range =>
+         (if I - Output'First < Upto then Output (I) = Old (I)))
+   with Ghost, Pre => Old'First = Output'First and then Old'Last = Output'Last;
+
+   --  Output equals Old at the offsets from From on
+   function Same_From (Old, Output : Byte_Array; From : Natural)
+     return Boolean
+   is (for all I in Output'Range =>
+         (if I - Output'First >= From then Output (I) = Old (I)))
+   with Ghost, Pre => Old'First = Output'First and then Old'Last = Output'Last;
+
+   --  W advanced from Old by at most Bits bits within the limit of Limit
+   --  bytes: nothing changes once failed, and a failure means that the
+   --  bits did not fit (the exact counterpart is in the Post of
+   --  Append_Bits and Append_Value).
+   function Wrote (Old, W : Bit_Writer; Bits, Limit : Natural) return Boolean
+   is (W.Pos <= 8 * Limit and then Old.Pos <= W.Pos
+       and then W.Pos <= Old.Pos + Bits
+       and then (if Old.Failed then W = Old)
+       and then (if W.Failed and then not Old.Failed
+                 then Old.Pos + Bits > 8 * Limit))
+   with Ghost, Pre => Bits <= 256 * Max_Length and then Limit <= Max_Length;
+
+   --  Expansion bound: an encoding step that consumes K input bytes writes
+   --  at most Byte_Bits * K bits
+   Byte_Bits : constant := 32;
+
    --  append_bits: appends the Len most significant bits of Code at bit
    --  W.Pos, without writing at or beyond byte Limit. Once a write would
    --  pass the limit, W.Failed is set and further calls do nothing (the
@@ -67,8 +109,19 @@ package body Unishox with SPARK_Mode is
       Code   : Byte;
       Len    : Bit_Length)
    with
-     Pre  => Limit <= Output'Length and then W.Pos <= 8 * Limit,
-     Post => W.Pos <= 8 * Limit
+     Pre  => Limit <= Output'Length and then Output'Length <= Max_Length
+       and then W.Pos <= 8 * Limit,
+     Post => W.Pos <= 8 * Limit and then W.Pos >= W.Pos'Old
+       and then (if W.Failed'Old then W = W'Old)
+       and then (if not W.Failed'Old
+                 then W.Failed = (W.Pos'Old + Len > 8 * Limit))
+       and then (if not W.Failed then W.Pos = W.Pos'Old + Len)
+       and then Wrote (W'Old, W, Len, Limit),
+     Contract_Cases =>
+       (others => Same_Below (Output'Old, Output, W.Pos'Old / 8)
+                    and then Same_From (Output'Old, Output, Limit)
+                    and then (if Zero_Tail (Output'Old, W'Old)
+                              then Zero_Tail (Output, W)))
    is
       Cur   : Natural;
       Idx   : Natural;
@@ -106,27 +159,60 @@ package body Unishox with SPARK_Mode is
       end if;
    end Append_Bits;
 
+   --  2 ** N as a table of literals (as Pow2 of Unishox.Tables.Lemmas,
+   --  which this Pure unit cannot depend on): the provers look up an entry
+   --  where they would have to unfold a power with a non-static exponent
+   Pow2 : constant array (0 .. 24) of Positive :=
+     (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048,
+      4096, 8192, 16_384, 32_768, 65_536, 131_072, 262_144,
+      524_288, 1_048_576, 2_097_152, 4_194_304, 8_388_608, 16_777_216)
+   with Ghost;
+
+   --  Value fits in N bits (Value < 2 ** N)
+   function Fits (Value, N : Natural) return Boolean is
+     (N in 1 .. 24 and then Value < Pow2 (N))
+   with Ghost;
+
    --  Appends the N low-order bits of Value, most significant first
-   --  (the multi-call sequences of encodeCount and encodeUnicode).
+   --  (the multi-call sequences of encodeCount and encodeUnicode). Value
+   --  must fit in N bits, so no wrong table entry can drop bits silently.
    procedure Append_Value
      (Output : in out Byte_Array;
       W      : in out Bit_Writer;
-      Value  : U32;
+      Value  : Natural;
       N      : Natural)
    with
-     Pre  => N <= 24 and then W.Pos <= 8 * Output'Length
-       and then Output'Length <= Max_Length,
-     Post => W.Pos <= 8 * Output'Length
+     Pre  => Output'Length <= Max_Length and then W.Pos <= 8 * Output'Length
+       and then Fits (Value, N),
+     Post => W.Pos <= 8 * Output'Length and then W.Pos >= W.Pos'Old
+       and then (if W.Failed'Old then W = W'Old)
+       and then (if not W.Failed'Old
+                 then W.Failed = (W.Pos'Old + N > 8 * Output'Length))
+       and then (if not W.Failed then W.Pos = W.Pos'Old + N)
+       and then Wrote (W'Old, W, N, Output'Length),
+     Contract_Cases =>
+       (others => (if Zero_Tail (Output'Old, W'Old) then Zero_Tail (Output, W)))
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       Left : Natural := N;
       Take : Natural;
       B    : Byte;
    begin
       for Chunk in 1 .. 3 loop
-         pragma Loop_Invariant (Left <= 24 and W.Pos <= 8 * Output'Length);
+         pragma Loop_Invariant
+           (Left <= N and then Left <= 8 * (4 - Chunk)
+            and then W.Pos <= 8 * Output'Length
+            and then W.Pos >= W.Pos'Loop_Entry
+            and then (if W.Failed'Loop_Entry then W = W'Loop_Entry)
+            and then (if not W.Failed
+                      then W.Pos = W.Pos'Loop_Entry + (N - Left))
+            and then (if W.Failed and then not W.Failed'Loop_Entry
+                      then W.Pos'Loop_Entry + N > 8 * Output'Length)
+            and then (if Zero_Tail (Output'Loop_Entry, W'Loop_Entry)
+                      then Zero_Tail (Output, W)));
          exit when Left = 0;
          Take := Natural'Min (8, Left);
-         B := Byte (Interfaces.Shift_Right (Value, Left - Take) mod 256);
+         B := Byte (Interfaces.Shift_Right (U32 (Value), Left - Take) mod 256);
          Append_Bits (Output, Output'Length, W,
                       Interfaces.Shift_Left (B, 8 - Take), Take);
          Left := Left - Take;
@@ -154,17 +240,32 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Pos (Output, E) and E.State = E.State'Old
                 and E.Is_All_Upper = E.Is_All_Upper'Old
                 and E.Prev_Uni = E.Prev_Uni'Old
+                and Wrote (E.W'Old, E.W, Len, Output'Length),
+        Contract_Cases =>
+          (others => (if Zero_Tail (Output'Old, E.W'Old)
+                      then Zero_Tail (Output, E.W)))
    is
    begin
       Append_Bits (Output, Output'Length, E.W, Code, Len);
    end Put_Bits;
 
+   --  Length of the switch code from State
+   function Switch_Bits (State : Set_Kind) return Natural is
+     (if State = Uni then 7 else 2)
+   with Ghost;
+
    --  append_switch_code
    procedure Append_Switch_Code
      (Output : in out Byte_Array; Limit : Natural; W : in out Bit_Writer;
       State : Set_Kind)
-   with Pre  => Limit <= Output'Length and then W.Pos <= 8 * Limit,
+   with Pre  => Limit <= Output'Length and then Output'Length <= Max_Length
+                and then W.Pos <= 8 * Limit,
         Post => W.Pos <= 8 * Limit
+                and then Wrote (W'Old, W, Switch_Bits (State), Limit),
+        Contract_Cases =>
+          (others => Same_From (Output'Old, Output, Limit)
+                       and then (if Zero_Tail (Output'Old, W'Old)
+                                 then Zero_Tail (Output, W)))
    is
    begin
       if State = Uni then
@@ -182,11 +283,25 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Pos (Output, E) and E.State = E.State'Old
                 and E.Is_All_Upper = E.Is_All_Upper'Old
                 and E.Prev_Uni = E.Prev_Uni'Old
+                and Wrote (E.W'Old, E.W, Switch_Bits (E.State) + HCode_Lens (Set),
+                           Output'Length),
+        Contract_Cases =>
+          (others => (if Zero_Tail (Output'Old, E.W'Old)
+                      then Zero_Tail (Output, E.W)))
    is
    begin
       Append_Switch_Code (Output, Output'Length, E.W, E.State);
       Append_Bits (Output, Output'Length, E.W, HCodes (Set), HCode_Lens (Set));
    end Switch_To;
+
+   --  Bits that append_code writes for Code from State
+   function Code_Bits (State : Set_Kind; Code : Set_Code) return Natural is
+     ((if (Code.Set = Alpha and then State = Alpha)
+         or else (Code.Set = Num and then State = Num)
+       then 0
+       else Switch_Bits (State) + HCode_Lens (Code.Set))
+      + VCode_Lens (Code.V))
+   with Ghost;
 
    --  append_code
    procedure Append_Code
@@ -195,6 +310,11 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Pos (Output, E)
                 and E.Is_All_Upper = E.Is_All_Upper'Old
                 and E.Prev_Uni = E.Prev_Uni'Old
+                and Wrote (E.W'Old, E.W, Code_Bits (E.State'Old, Code),
+                           Output'Length),
+        Contract_Cases =>
+          (others => (if Zero_Tail (Output'Old, E.W'Old)
+                      then Zero_Tail (Output, E.W)))
    is
    begin
       case Code.Set is
@@ -216,6 +336,12 @@ package body Unishox with SPARK_Mode is
       Put_Bits (Output, E, VCodes (Code.V), VCode_Lens (Code.V));
    end Append_Code;
 
+   --  Bits that encodeCount writes for Count (prefix and value)
+   function Count_Bits (Count : Natural) return Natural is
+     (if Count < 4 then 3 elsif Count < 20 then 6 elsif Count < 148 then 10
+      elsif Count < 2196 then 15 else 20)
+   with Ghost;
+
    --  encodeCount
    procedure Encode_Count
      (Output : in out Byte_Array; E : in out Encoder; Count : Natural)
@@ -223,6 +349,10 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Pos (Output, E) and E.State = E.State'Old
                 and E.Is_All_Upper = E.Is_All_Upper'Old
                 and E.Prev_Uni = E.Prev_Uni'Old
+                and Wrote (E.W'Old, E.W, Count_Bits (Count), Output'Length),
+        Contract_Cases =>
+          (others => (if Zero_Tail (Output'Old, E.W'Old)
+                      then Zero_Tail (Output, E.W)))
    is
    begin
       for I in Level loop
@@ -230,7 +360,7 @@ package body Unishox with SPARK_Mode is
             Put_Bits (Output, E, Count_Prefix (I), Count_Prefix_Len (I));
             Append_Value
               (Output, E.W,
-               U32 (Count - (if I = 0 then 0 else Count_Adder (I - 1))),
+               Count - (if I = 0 then 0 else Count_Adder (I - 1)),
                Count_Bit_Lens (I));
             return;
          end if;
@@ -245,6 +375,10 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Pos (Output, E) and E.State = E.State'Old
                 and E.Is_All_Upper = E.Is_All_Upper'Old
                 and E.Prev_Uni = E.Prev_Uni'Old
+                and Wrote (E.W'Old, E.W, 27, Output'Length),
+        Contract_Cases =>
+          (others => (if Zero_Tail (Output'Old, E.W'Old)
+                      then Zero_Tail (Output, E.W)))
    is
       Diff : constant Natural := abs (Code - Prev);
    begin
@@ -253,7 +387,7 @@ package body Unishox with SPARK_Mode is
             Put_Bits (Output, E, Uni_Prefix (I), Uni_Prefix_Len (I));
             Put_Bits (Output, E, (if Prev > Code then 16#80# else 0), 1);
             Append_Value
-              (Output, E.W, U32 (Diff - Uni_Adder (I)), Uni_Bit_Len (I));
+              (Output, E.W, Diff - Uni_Adder (I), Uni_Bit_Len (I));
             return;
          end if;
       end loop;
@@ -266,6 +400,11 @@ package body Unishox with SPARK_Mode is
         Post => Valid_Pos (Output, E) and E.State = E.State'Old
                 and E.Is_All_Upper = E.Is_All_Upper'Old
                 and E.Prev_Uni = E.Prev_Uni'Old
+                and Wrote (E.W'Old, E.W, Switch_Bits (E.State) + 4,
+                           Output'Length),
+        Contract_Cases =>
+          (others => (if Zero_Tail (Output'Old, E.W'Old)
+                      then Zero_Tail (Output, E.W)))
    is
    begin
       Switch_To (Output, E, Num);
@@ -350,6 +489,13 @@ package body Unishox with SPARK_Mode is
                 and then L < Input'Length
                 and then E.Is_All_Upper = E.Is_All_Upper'Old
                 and then E.Prev_Uni = E.Prev_Uni'Old
+                and then (if Handled
+                          then Wrote (E.W'Old, E.W, Byte_Bits * (L - L'Old + 1),
+                                      Output'Length)
+                          else L = L'Old and then E.W = E.W'Old),
+        Contract_Cases =>
+          (others => (if Zero_Tail (Output'Old, E.W'Old)
+                      then Zero_Tail (Output, E.W)))
    is
       Len          : constant Natural := Input'Length;
       K            : Natural;
@@ -419,6 +565,13 @@ package body Unishox with SPARK_Mode is
                 and then L < Input'Length
                 and then E.Is_All_Upper = E.Is_All_Upper'Old
                 and then E.Prev_Uni = E.Prev_Uni'Old
+                and then (if Handled
+                          then Wrote (E.W'Old, E.W, Byte_Bits * (L - L'Old + 1),
+                                      Output'Length)
+                          else L = L'Old and then E.W = E.W'Old),
+        Contract_Cases =>
+          (others => (if Zero_Tail (Output'Old, E.W'Old)
+                      then Zero_Tail (Output, E.W)))
    is
       Len : constant Natural := Input'Length;
       C   : Byte;
@@ -460,7 +613,15 @@ package body Unishox with SPARK_Mode is
                 and then L < Input'Length
                 and then E.Is_All_Upper = E.Is_All_Upper'Old
                 and then E.Prev_Uni = E.Prev_Uni'Old
+                and then (if Handled
+                          then Wrote (E.W'Old, E.W, Byte_Bits * (L - L'Old + 1),
+                                      Output'Length)
+                          else L = L'Old and then E.W = E.W'Old),
+        Contract_Cases =>
+          (others => (if Zero_Tail (Output'Old, E.W'Old)
+                      then Zero_Tail (Output, E.W)))
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       Len      : constant Natural := Input'Length;
       Hex_Type : Nibble_Kind := Nib_Num;
       Nib      : Nibble_Kind;
@@ -505,7 +666,11 @@ package body Unishox with SPARK_Mode is
       for P in L .. L + 35 loop
          pragma Loop_Invariant (Valid_Pos (Output, E)
                                 and E.Is_All_Upper = E.Is_All_Upper'Loop_Entry
-                                and E.Prev_Uni = E.Prev_Uni'Loop_Entry);
+                                and E.Prev_Uni = E.Prev_Uni'Loop_Entry
+                                and (if Zero_Tail (Output'Loop_Entry, E.W'Loop_Entry)
+                                     then Zero_Tail (Output, E.W)));
+         pragma Loop_Invariant
+           (Wrote (E.W'Loop_Entry, E.W, 4 * (P - L), Output'Length));
          if Get (Input, P) /= Ch ('-') then
             Put_Bits (Output, E, Base_Code (Get (Input, P)), 4);
          end if;
@@ -527,7 +692,15 @@ package body Unishox with SPARK_Mode is
                 and then L < Input'Length
                 and then E.Is_All_Upper = E.Is_All_Upper'Old
                 and then E.Prev_Uni = E.Prev_Uni'Old
+                and then (if Handled
+                          then Wrote (E.W'Old, E.W, Byte_Bits * (L - L'Old + 1),
+                                      Output'Length)
+                          else L = L'Old and then E.W = E.W'Old),
+        Contract_Cases =>
+          (others => (if Zero_Tail (Output'Old, E.W'Old)
+                      then Zero_Tail (Output, E.W)))
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       Len      : constant Natural := Input'Length;
       Hex_Type : Nibble_Kind := Nib_Num;
       Hex_Len  : Natural := 0;
@@ -562,7 +735,11 @@ package body Unishox with SPARK_Mode is
          for P in L .. L + Hex_Len - 1 loop
             pragma Loop_Invariant (Valid_Pos (Output, E)
                                    and E.Is_All_Upper = E.Is_All_Upper'Loop_Entry
-                                   and E.Prev_Uni = E.Prev_Uni'Loop_Entry);
+                                   and E.Prev_Uni = E.Prev_Uni'Loop_Entry
+                                   and (if Zero_Tail (Output'Loop_Entry, E.W'Loop_Entry)
+                                        then Zero_Tail (Output, E.W)));
+            pragma Loop_Invariant
+              (Wrote (E.W'Loop_Entry, E.W, 4 * (P - L), Output'Length));
             Put_Bits (Output, E, Base_Code (Get (Input, P)), 4);
          end loop;
          L := L + Hex_Len - 1;
@@ -593,7 +770,15 @@ package body Unishox with SPARK_Mode is
                 and then L < Input'Length
                 and then E.Is_All_Upper = E.Is_All_Upper'Old
                 and then E.Prev_Uni = E.Prev_Uni'Old
+                and then (if Handled
+                          then Wrote (E.W'Old, E.W, Byte_Bits * (L - L'Old + 1),
+                                      Output'Length)
+                          else L = L'Old and then E.W = E.W'Old),
+        Contract_Cases =>
+          (others => (if Zero_Tail (Output'Old, E.W'Old)
+                      then Zero_Tail (Output, E.W)))
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       Len  : constant Natural := Input'Length;
       Tlen : Positive;
       J    : Natural;
@@ -601,7 +786,11 @@ package body Unishox with SPARK_Mode is
    begin
       Handled := False;
       for I in Template_Index loop
+         pragma Loop_Invariant
+           (E = E'Loop_Entry and then L = L'Loop_Entry
+            and then Output = Output'Loop_Entry and then not Handled);
          Tlen := Templates (I).Len;
+         pragma Assert (Tlen >= 8);   --  so a match covers at least 6 bytes
          J := 0;
          while J < Tlen and then L + J < Len
            and then Template_Accepts (Templates (I).Text (J + 1),
@@ -621,7 +810,11 @@ package body Unishox with SPARK_Mode is
             for K in 0 .. J - 1 loop
                pragma Loop_Invariant (Valid_Pos (Output, E)
                                       and E.Is_All_Upper = E.Is_All_Upper'Loop_Entry
-                                      and E.Prev_Uni = E.Prev_Uni'Loop_Entry);
+                                      and E.Prev_Uni = E.Prev_Uni'Loop_Entry
+                                      and (if Zero_Tail (Output'Loop_Entry, E.W'Loop_Entry)
+                                           then Zero_Tail (Output, E.W)));
+               pragma Loop_Invariant
+                 (Wrote (E.W'Loop_Entry, E.W, 4 * K, Output'Length));
                T := Templates (I).Text (K + 1);
                case T is
                   when 'f' | 'F' =>
@@ -659,6 +852,13 @@ package body Unishox with SPARK_Mode is
                 and then L < Input'Length
                 and then E.Is_All_Upper = E.Is_All_Upper'Old
                 and then E.Prev_Uni = E.Prev_Uni'Old
+                and then (if Handled
+                          then Wrote (E.W'Old, E.W, Byte_Bits * (L - L'Old + 1),
+                                      Output'Length)
+                          else L = L'Old and then E.W = E.W'Old),
+        Contract_Cases =>
+          (others => (if Zero_Tail (Output'Old, E.W'Old)
+                      then Zero_Tail (Output, E.W)))
    is
       Len : constant Natural := Input'Length;
       N   : Positive;
@@ -688,7 +888,13 @@ package body Unishox with SPARK_Mode is
                 and then Valid_Pos (Output, E),
         Post => Valid_Pos (Output, E) and then L >= L'Old
                 and then L < Input'Length
+                and then Wrote (E.W'Old, E.W, Byte_Bits * (L - L'Old + 1),
+                                Output'Length),
+        Contract_Cases =>
+          (others => (if Zero_Tail (Output'Old, E.W'Old)
+                      then Zero_Tail (Output, E.W)))
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       Len       : constant Natural := Input'Length;
       C_In      : constant Byte := Get (Input, L);
       C_Next    : Byte := 0;
@@ -749,6 +955,8 @@ package body Unishox with SPARK_Mode is
             else
                Idx := Natural (C_In) - 33;
             end if;
+            --  A letter is coded in the Alpha set (expansion bound)
+            pragma Assert (if Is_Upper then Code_94 (Idx).Set = Alpha);
             Append_Code (Output, E, Code_94 (Idx));
          end if;
       elsif C_In = 13 and then C_Next = 10 then
@@ -799,7 +1007,12 @@ package body Unishox with SPARK_Mode is
             Put_Bits (Output, E, 16#F8#, 5);
             Encode_Count (Output, E, Bin_Count);
             for P in L .. L + Bin_Count - 1 loop
-               pragma Loop_Invariant (Valid_Pos (Output, E));
+               pragma Loop_Invariant
+                 (Valid_Pos (Output, E)
+                  and (if Zero_Tail (Output'Loop_Entry, E.W'Loop_Entry)
+                       then Zero_Tail (Output, E.W)));
+               pragma Loop_Invariant
+                 (Wrote (E.W'Loop_Entry, E.W, 8 * (P - L), Output'Length));
                Put_Bits (Output, E, Get (Input, P), 8);
             end loop;
             L := L + Bin_Count - 1;
@@ -817,8 +1030,11 @@ package body Unishox with SPARK_Mode is
       Output_Length : out Natural;
       Success       : out Boolean)
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       Len     : constant Natural := Input'Length;
       E       : Encoder;
+      Init    : constant Bit_Writer := (Pos => 0, Failed => False)
+      with Ghost;
       L       : Natural := 0;
       Handled : Boolean;
       Rst     : Natural;
@@ -826,7 +1042,9 @@ package body Unishox with SPARK_Mode is
       Output := (others => 0);
       Put_Bits (Output, E, 16#FF#, 1);              --  UNISHOX_MAGIC_BITS
       while L < Len and then not E.W.Failed loop
-         pragma Loop_Invariant (Valid_Pos (Output, E));
+         pragma Loop_Invariant (Valid_Pos (Output, E) and Zero_Tail (Output, E.W));
+         pragma Loop_Invariant
+           (L < Len and then Wrote (Init, E.W, 1 + Byte_Bits * L, Output'Length));
          pragma Loop_Variant (Increases => L);
          Handled := False;
          if L + Nice_Len <= Len then
