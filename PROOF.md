@@ -5,7 +5,7 @@ release configuration (with the light-runtime restrictions of `unishox.adc`):
 
     gnatprove -P unishox_spark.gpr --level=2 --mode=all --checks-as-errors=on
 
-Result on 2026-10-31: **all 1,079 checks proved, none unproved, none justified** (no
+Result on 2026-10-31: **all 1,120 checks proved, none unproved, none justified** (no
 `pragma Annotate`, no `Assume`); the largest proof takes 14,181 of the 100,000 steps allowed
 and under a second; no check has 16 or more verification conditions. Seven short loops of at
 most 20 iterations (over the five count and Unicode levels, the sets of the horizontal codes,
@@ -19,11 +19,11 @@ the CI run (`.github/workflows/ci.yml`) has no cache and is the authoritative pr
 | Initialization | 92 | flow analysis |
 | Non-aliasing | 17 | flow analysis |
 | Data dependencies | 9 | flow analysis |
-| Run-time checks (index, overflow, range, division) | 527 | provers |
-| Assertions (loop invariants, lemmas, assertions) | 72 | provers |
-| Functional contracts (pre/postconditions, contract cases) | 325 | provers |
-| Termination (loop variants, subprogram termination) | 37 | flow 29, provers 8 |
-| **Total** | **1,079** | |
+| Run-time checks (index, overflow, range, division) | 532 | provers |
+| Assertions (loop invariants, lemmas, assertions) | 86 | provers |
+| Functional contracts (pre/postconditions, contract cases) | 345 | provers |
+| Termination (loop variants, subprogram termination) | 39 | flow 31, provers 8 |
+| **Total** | **1,120** | |
 
 What is proved:
 
@@ -42,7 +42,9 @@ What is proved:
   bits do not fit (`Pos'Old + Len > 8 * Limit`); they change no byte below the one being
   written and keep every byte not yet started zero. Every encoder step carries a proved bound
   on the bits it appends (`Wrote`). The decoder's `Put` appends exactly one byte at `OL`,
-  changes no other byte, and overflows exactly when `OL = Output'Length`.
+  changes no other byte, and overflows exactly when `OL = Output'Length`; every decoder step
+  only appends (`Appended`: the bytes below the old `OL` are unchanged, the bytes from the
+  new `OL` on stay zero), which is what makes the zero tail of `Decompress` hold.
 - **The tables are consistent** (`src/unishox-tables-lemmas.adb`, a ghost unit with no code
   in the release build): the count and Unicode levels tile their ranges with powers of two,
   so the writer never drops a bit of a count or a code point (`Append_Value` requires
@@ -90,8 +92,8 @@ Proof-relevant design choices:
 - Byte fields are decoded with `mod` and `/` instead of `and`/shift masks where a bound is
   needed (`B / 32 = 6` for `(b & 0xE0) == 0xC0`, the vertical-code section lookup written
   as five explicit ranges), which keeps the proofs in linear integer arithmetic.
-- The frame contracts (`Zero_Tail`, `Same_Below`, `Same_From`, the element-wise frame of
-  `Put`) quantify over the 4096-byte buffer and would cost a pass over it, plus a copy for
+- The frame contracts (`Zero_Tail`, `Dec_Zero_Tail`, `Appended`, `Same_Below`, `Same_From`,
+  the element-wise frame of `Put`) quantify over the 4096-byte buffer and would cost a pass over it, plus a copy for
   `'Old`, at every call in the checks build. They are stated as `Contract_Cases` and loop
   invariants under `pragma Assertion_Policy (Contract_Cases => Ignore)` and local
   `(Loop_Invariant => Ignore)`: GNATprove proves them, the checks build does not execute them.

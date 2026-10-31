@@ -12,7 +12,7 @@ can decode the other's output.
 Light-runtime discipline: no heap, no secondary stack, no exceptions, no tasking, no I/O
 (`unishox.adc`); every buffer is the caller's and at most 4096 bytes; every loop is
 bounded. GNATprove proves the absence of run-time errors, the bounds and frame of the output
-and a compressed-size bound (1,079 of 1,079 checks, see [PROOF.md](PROOF.md)), so the release
+and a compressed-size bound (1,120 of 1,120 checks, see [PROOF.md](PROOF.md)), so the release
 build runs with checks off.
 
 ## API
