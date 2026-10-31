@@ -11,7 +11,9 @@ and under a second; no check has 16 or more verification conditions. Seven short
 most 20 iterations (over the five count and Unicode levels, the sets of the horizontal codes,
 the sections of the vertical codes, and in the lemma unit) are unrolled by GNATprove and
 proved per iteration. About 45 s wall-clock on an Apple M5
-(`-j0`). A local run replays the result cache of `prove.sh`, so its prover shares say nothing;
+(`-j0`). GNATprove 15.1.0 proves the same 1,120 checks (largest proof 27,977 steps, 2.8 s), so
+16.1 is the version reported here, not a requirement. A local run replays the result cache of
+`prove.sh`, so its prover shares say nothing;
 the CI run (`.github/workflows/ci.yml`) has no cache and is the authoritative proof.
 
 | category | checks | how |
