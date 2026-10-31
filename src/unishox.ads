@@ -65,11 +65,14 @@ package Unishox with SPARK_Mode, Pure is
      Post => Output_Length <= Output'Length
        and then (if not Success
                  then Output_Length = 0
-                   and then (for all B of Output => B = 0));
+                   and then (for all B of Output => B = 0))
+       and then (for all I in Output'First + Output_Length .. Output'Last =>
+                   Output (I) = 0);
    --  Decompresses Input into Output exactly as unishox2_decompress_simple
    --  does (also for malformed input, which decodes to whatever the
    --  reference produces and never reads or writes out of bounds).
    --  Success is False, Output_Length is 0 and Output is all zero if the
-   --  result does not fit in Output.
+   --  result does not fit in Output. The bytes after the decoded text are
+   --  zero.
 
 end Unishox;

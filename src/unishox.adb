@@ -1877,6 +1877,7 @@ package body Unishox with SPARK_Mode is
       Output_Length : out Natural;
       Success       : out Boolean)
    is
+      pragma Assertion_Policy (Loop_Invariant => Ignore);   --  see Zero_Tail
       D      : Decoder;
       Result : Step_Result := Go_On;
    begin
@@ -1887,6 +1888,7 @@ package body Unishox with SPARK_Mode is
          pragma Loop_Invariant (Valid_Dec (Input, Output, D)
                                 and then D.Bit_No >= Iter
                                 and then Result = Go_On);
+         pragma Loop_Invariant (Dec_Zero_Tail (Output, D.OL));
          exit when D.Bit_No >= 8 * Input'Length;
          Decode_Step (Input, Output, D, Result);
          exit when Result = Stop or else D.Overflow;
